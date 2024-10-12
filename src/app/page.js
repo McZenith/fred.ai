@@ -18,7 +18,7 @@ const Home = () => {
   // Fetch data for live matches from the API
   const fetchLiveData = () => {
     setIsLoading(true);
-    fetch('/api/getData')
+    fetch('/api/getData', { cache: 'no-store' })
       .then((response) => response.json())
       .then((result) => {
         setLiveData(result.data);
@@ -34,7 +34,7 @@ const Home = () => {
   // Fetch data for upcoming matches from the API
   const fetchUpcomingData = () => {
     setIsLoading(true);
-    fetch('/api/getUpcomingData')
+    fetch('/api/getUpcomingData', { cache: 'no-store' })
       .then((response) => response.json())
       .then((result) => {
         setUpcomingData(result.data.tournaments); // Access the tournaments array
