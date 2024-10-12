@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { FaSearch, FaAngleDown, FaAngleUp, FaInfoCircle } from 'react-icons/fa';
 import { Spinner } from '@/app/components/Spinner';
 
+export const fetchCache = 'force-no-store';
+
 const Home = () => {
   const [liveData, setLiveData] = useState([]);
   const [upcomingData, setUpcomingData] = useState([]);
