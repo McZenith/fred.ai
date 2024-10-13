@@ -85,12 +85,34 @@ const Home = () => {
 
   // Function to filter by markets with "Over 1.5" probability > 0.7
   const filterByOver1_5Probability = (event) => {
-    return event.markets.some((market) =>
-      market.outcomes.some(
-        (outcome) => outcome.desc === 'Over 1.5' && outcome.probability > 0.7
+    // Extract current score
+    const currentScore = parseScore(event.setScore); // Helper function to calculate the total score
+
+    // Check if the match has less than 2 goals and "Over 1.5" probability is > 0.7
+    return (
+      currentScore < 2 &&
+      event.markets.some((market) =>
+        market.outcomes.some(
+          (outcome) => outcome.desc === 'Over 1.5' && outcome.probability > 0.7
+        )
       )
     );
   };
+
+  // Helper function to parse and sum up the score
+  function parseScore(scoreString) {
+    // Assuming the score is in the format "1-0", "2-2", etc.
+    if (!scoreString || typeof scoreString !== 'string') return 0;
+
+    const [homeScore, awayScore] = scoreString
+      .split(':')
+      .map((s) => parseInt(s.trim(), 10));
+
+    // Sum the scores from both teams
+    return (
+      (isNaN(homeScore) ? 0 : homeScore) + (isNaN(awayScore) ? 0 : awayScore)
+    );
+  }
 
   const filterAndSortData = (data) => {
     let filteredData = data.filter(
@@ -177,10 +199,13 @@ const Home = () => {
     const dataToCopy = (
       activeTab === 'live' ? filteredLiveData : filteredUpcomingData
     )
+
       .flatMap((tournament) =>
         tournament.events.map((event) => event.homeTeamName)
       )
       .join('\n');
+
+    console.log(dataToCopy);
 
     if (dataToCopy.length > 0) {
       navigator.clipboard
