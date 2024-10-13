@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
@@ -16,9 +17,15 @@ export async function GET() {
     });
 
     // Send the response data back to the client
-    return Response.json(response.data);
+    return NextResponse.json(response.data);
   } catch (error) {
     console.error('Error fetching data:', error);
-    return Response.json({ message: 'Error fetching data' }, { status: 500 });
+    return NextResponse.json(
+      { message: 'Error fetching data' },
+      { status: 500 }
+    );
   }
 }
+
+export const revalidate = 0;
+
