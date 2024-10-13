@@ -492,6 +492,25 @@ const Home = () => {
                     </button>
                   </div>
                   <div className='text-sm text-gray-700 mb-4'>
+                    {activeTab === 'live' && (
+                      <>
+                        <p>
+                          Status: {event.matchStatus} | Period: {event.period}
+                        </p>
+                        <p>
+                          Score:{' '}
+                          <span className='text-blue-600 font-semibold'>
+                            {event.setScore}
+                          </span>
+                        </p>
+                        <p>
+                          Played Time:{' '}
+                          <span className='text-blue-600 font-semibold'>
+                            {event.playedSeconds}
+                          </span>
+                        </p>
+                      </>
+                    )}
                     <p>
                       Estimated Start Time:{' '}
                       <span className='text-gray-500'>
@@ -587,6 +606,26 @@ const Home = () => {
                         </button>
                       </div>
                       <div className='text-sm text-gray-700 mb-4'>
+                        {activeTab === 'live' && (
+                          <>
+                            <p>
+                              Status: {event.matchStatus} | Period:{' '}
+                              {event.period}
+                            </p>
+                            <p>
+                              Score:{' '}
+                              <span className='text-blue-600 font-semibold'>
+                                {event.setScore}
+                              </span>
+                            </p>
+                            <p>
+                              Played Time:{' '}
+                              <span className='text-blue-600 font-semibold'>
+                                {event.playedSeconds}
+                              </span>
+                            </p>
+                          </>
+                        )}
                         <p>
                           Estimated Start Time:{' '}
                           <span className='text-gray-500'>
