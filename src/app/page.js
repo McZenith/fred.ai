@@ -99,6 +99,37 @@ const Home = () => {
     );
   };
 
+
+  const filterByOver2_5Probability = (event) => {
+    // Extract current score
+    const currentScore = parseScore(event.setScore); // Helper function to calculate the total score
+
+    // Check if the match has less than 2 goals and "Over 1.5" probability is > 0.7
+    return (
+      currentScore < 2 &&
+      event.markets.some((market) =>
+        market.outcomes.some(
+          (outcome) => outcome.desc === 'Over 2.5' && outcome.probability > 0.7
+        )
+      )
+    );
+  };
+
+  const filterByOver3_5Probability = (event) => {
+    // Extract current score
+    const currentScore = parseScore(event.setScore); // Helper function to calculate the total score
+
+    // Check if the match has less than 2 goals and "Over 1.5" probability is > 0.7
+    return (
+      currentScore < 2 &&
+      event.markets.some((market) =>
+        market.outcomes.some(
+          (outcome) => outcome.desc === 'Over 3.5' && outcome.probability > 0.7
+        )
+      )
+    );
+  };
+
   // Helper function to parse and sum up the score
   function parseScore(scoreString) {
     // Assuming the score is in the format "1-0", "2-2", etc.
@@ -132,6 +163,18 @@ const Home = () => {
       filteredData = filteredData.map((tournament) => ({
         ...tournament,
         events: tournament.events.filter(filterByOver1_5Probability),
+      }));
+    } else if (sortByTime === 'over2.5') {
+      // Filter by "Over 2.5" probability > 0.7
+      filteredData = filteredData.map((tournament) => ({
+        ...tournament,
+        events: tournament.events.filter(filterByOver2_5Probability),
+      }));
+    } else if (sortByTime === 'over3.5') {
+      // Filter by "Over 3.5" probability > 0.7
+      filteredData = filteredData.map((tournament) => ({
+        ...tournament,
+        events: tournament.events.filter(filterByOver3_5Probability),
       }));
     } else if (sortByTime !== 'none') {
       // Flatten the data structure when sorting by time
@@ -302,7 +345,15 @@ const Home = () => {
                 <option value='none'>No Time Sorting</option>
                 <option value='asc'>Sort by Time: Ascending</option>
                 <option value='desc'>Sort by Time: Descending</option>
-                <option value='over1.5'>Filter by Over 1.5 (Probabilit)</option>
+                <option value='over1.5'>
+                  Filter by Over 1.5 (Probability)
+                </option>
+                <option value='over2.5'>
+                  Filter by Over 2.5 (Probability)
+                </option>
+                <option value='over3.5'>
+                  Filter by Over 3.5 (Probability)
+                </option>
               </select>
               <FaAngleDown className='w-5 h-5 absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none' />
             </div>
@@ -478,123 +529,128 @@ const Home = () => {
         )}
 
         {/* When sorting by time, just display a header and all matches flat */}
-        {sortByTime !== 'none' && sortByTime !== 'over1.5' && (
-          <div>
-            <h2 className='text-3xl font-semibold mb-6 text-center'>
-              Sorted by Time
-            </h2>
-            {filteredLiveData.length === 0 && isInitialFetch && isLoading && (
-              <div className='flex justify-center items-center mt-12'>
-                <Spinner className='w-12 h-12 text-blue-500' />
-              </div>
-            )}
-            <div className='space-y-8'>
-              {filteredLiveData.map((event) => (
-                <div
-                  key={event.eventId}
-                  className='p-6 mb-4 rounded-lg shadow-lg bg-white hover:shadow-xl transition-shadow duration-300 cursor-pointer'
-                  onClick={() => toggleCard(event.eventId)}
-                >
-                  <div className='flex items-center justify-between'>
-                    <p className='text-xl font-bold mb-2'>
-                      {event.homeTeamName} vs {event.awayTeamName}
-                    </p>
-                    <p className='text-sm text-gray-500'>
-                      Markets Available: {event.markets.length}
-                    </p>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleCard(event.eventId);
-                      }}
-                      className='focus:outline-none text-blue-500'
-                    >
-                      {expandedCard === event.eventId ? (
-                        <FaAngleUp className='w-6 h-6' />
-                      ) : (
-                        <FaAngleDown className='w-6 h-6' />
-                      )}
-                    </button>
-                  </div>
-                  <div className='text-sm text-gray-700 mb-4'>
-                    {activeTab === 'live' && (
-                      <>
-                        <p>
-                          Status: {event.matchStatus} | Period: {event.period}
-                        </p>
-                        <p>
-                          Score:{' '}
-                          <span className='text-blue-600 font-semibold'>
-                            {event.setScore}
-                          </span>
-                        </p>
-                        <p>
-                          Played Time:{' '}
-                          <span className='text-blue-600 font-semibold'>
-                            {event.playedSeconds}
-                          </span>
-                        </p>
-                      </>
-                    )}
-                    <p>
-                      Estimated Start Time:{' '}
-                      <span className='text-gray-500'>
-                        {new Date(event.estimateStartTime).toLocaleString()}
-                      </span>
-                    </p>
-                  </div>
-
-                  {expandedCard === event.eventId && (
-                    <div className='mt-4'>
-                      <h3 className='text-lg font-semibold mb-4 flex items-center'>
-                        <FaInfoCircle className='mr-2 text-blue-500' />
-                        Betting Markets
-                      </h3>
-                      <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
-                        {event.markets.map((market) => (
-                          <div key={market.id} className='border-t pt-4'>
-                            <h4 className='font-semibold mb-1 text-gray-900'>
-                              {market.name}
-                            </h4>
-                            <ul className='list-disc ml-5'>
-                              {market.outcomes.map((outcome) => (
-                                <li
-                                  key={outcome.id}
-                                  className={`mb-2 ${
-                                    outcome.probability > 0.6
-                                      ? 'text-blue-600 font-semibold'
-                                      : ''
-                                  }`}
-                                >
-                                  {outcome.desc}: Odds{' '}
-                                  <span className='font-semibold'>
-                                    {outcome.odds}
-                                  </span>
-                                  <>
-                                    , Probability:{' '}
-                                    <span className='font-semibold'>
-                                      {outcome.probability}
-                                    </span>
-                                  </>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+        {sortByTime !== 'none' &&
+          sortByTime !== 'over1.5' &&
+          sortByTime !== 'over2.5' &&
+          sortByTime !== 'over3.5' && (
+            <div>
+              <h2 className='text-3xl font-semibold mb-6 text-center'>
+                Sorted by Time
+              </h2>
+              {filteredLiveData.length === 0 && isInitialFetch && isLoading && (
+                <div className='flex justify-center items-center mt-12'>
+                  <Spinner className='w-12 h-12 text-blue-500' />
                 </div>
-              ))}
+              )}
+              <div className='space-y-8'>
+                {filteredLiveData.map((event) => (
+                  <div
+                    key={event.eventId}
+                    className='p-6 mb-4 rounded-lg shadow-lg bg-white hover:shadow-xl transition-shadow duration-300 cursor-pointer'
+                    onClick={() => toggleCard(event.eventId)}
+                  >
+                    <div className='flex items-center justify-between'>
+                      <p className='text-xl font-bold mb-2'>
+                        {event.homeTeamName} vs {event.awayTeamName}
+                      </p>
+                      <p className='text-sm text-gray-500'>
+                        Markets Available: {event.markets?.length}
+                      </p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCard(event.eventId);
+                        }}
+                        className='focus:outline-none text-blue-500'
+                      >
+                        {expandedCard === event.eventId ? (
+                          <FaAngleUp className='w-6 h-6' />
+                        ) : (
+                          <FaAngleDown className='w-6 h-6' />
+                        )}
+                      </button>
+                    </div>
+                    <div className='text-sm text-gray-700 mb-4'>
+                      {activeTab === 'live' && (
+                        <>
+                          <p>
+                            Status: {event.matchStatus} | Period: {event.period}
+                          </p>
+                          <p>
+                            Score:{' '}
+                            <span className='text-blue-600 font-semibold'>
+                              {event.setScore}
+                            </span>
+                          </p>
+                          <p>
+                            Played Time:{' '}
+                            <span className='text-blue-600 font-semibold'>
+                              {event.playedSeconds}
+                            </span>
+                          </p>
+                        </>
+                      )}
+                      <p>
+                        Estimated Start Time:{' '}
+                        <span className='text-gray-500'>
+                          {new Date(event.estimateStartTime).toLocaleString()}
+                        </span>
+                      </p>
+                    </div>
+
+                    {expandedCard === event.eventId && (
+                      <div className='mt-4'>
+                        <h3 className='text-lg font-semibold mb-4 flex items-center'>
+                          <FaInfoCircle className='mr-2 text-blue-500' />
+                          Betting Markets
+                        </h3>
+                        <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+                          {event.markets.map((market) => (
+                            <div key={market.id} className='border-t pt-4'>
+                              <h4 className='font-semibold mb-1 text-gray-900'>
+                                {market.name}
+                              </h4>
+                              <ul className='list-disc ml-5'>
+                                {market.outcomes.map((outcome) => (
+                                  <li
+                                    key={outcome.id}
+                                    className={`mb-2 ${
+                                      outcome.probability > 0.6
+                                        ? 'text-blue-600 font-semibold'
+                                        : ''
+                                    }`}
+                                  >
+                                    {outcome.desc}: Odds{' '}
+                                    <span className='font-semibold'>
+                                      {outcome.odds}
+                                    </span>
+                                    <>
+                                      , Probability:{' '}
+                                      <span className='font-semibold'>
+                                        {outcome.probability}
+                                      </span>
+                                    </>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Filter by Over 1.5 (Probability > 0.7) */}
-        {sortByTime === 'over1.5' && (
+        {(sortByTime === 'over1.5' ||
+          sortByTime === 'over2.5' ||
+          sortByTime === 'over3.5') && (
           <div>
             <h2 className='text-3xl font-semibold mb-6 text-center'>
-              Filtered by Over 1.5 (Probability)
+              Filtered by {sortByTime}
             </h2>
             <div className='space-y-8'>
               {(activeTab === 'live'
