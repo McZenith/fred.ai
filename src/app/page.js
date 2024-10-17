@@ -145,7 +145,7 @@ const Home = () => {
   }
 
   const filterAndSortData = (data) => {
-    let filteredData = data.filter(
+    let filteredData = data?.filter(
       (tournament) =>
         (!selectedTournament || tournament.name === selectedTournament) &&
         tournament.events.some(
