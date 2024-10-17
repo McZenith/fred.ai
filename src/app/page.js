@@ -244,11 +244,14 @@ const Home = () => {
       const outcome = market.outcomes.find(
         (outcome) => outcome.desc === 'Over 1.5'
       );
-      return {
-        marketName: market.name,
-        odds: outcome.odds,
-        probability: outcome.probability,
-      };
+
+      if (outcome.probability > 0.7) {
+        return {
+          marketName: market.name,
+          odds: outcome.odds,
+          probability: outcome.probability,
+        };
+      }
     }
     return null;
   };
