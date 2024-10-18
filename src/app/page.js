@@ -8,6 +8,7 @@ import {
   FaClipboard,
 } from 'react-icons/fa';
 import { Spinner } from '@/app/components/Spinner';
+import { teamsObjectList } from '../utils/ratedMatch';
 
 const Home = () => {
   const [liveData, setLiveData] = useState([]);
@@ -283,6 +284,15 @@ const Home = () => {
     }
   };
 
+  const isHighProbabilityMatch = (homeTeam, awayTeam) => {
+    return teamsObjectList?.some(
+      (team) =>
+        (homeTeam.includes(team.homeTeam) ||
+          team.homeTeam.includes(homeTeam)) &&
+        (awayTeam.includes(team.awayTeam) || team.awayTeam.includes(awayTeam))
+    );
+  };
+
   return (
     <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen flex items-center justify-center'>
       <div className='container mx-auto px-4 py-8'>
@@ -443,11 +453,19 @@ const Home = () => {
                   {expandedTournaments.has(tournament.name) &&
                     tournament.events?.map((event) => {
                       const over1_5Market = getOver1_5Market(event);
+                      const highProbability = isHighProbabilityMatch(
+                        event.homeTeamName,
+                        event.awayTeamName
+                      );
+
+                      var possibleClass = highProbability
+                        ? 'bg-green-100 border-2 border-green-500'
+                        : 'bg-white';
 
                       return (
                         <div
                           key={event.eventId}
-                          className={`p-6 mb-4 rounded-lg shadow-lg bg-white hover:shadow-xl transition-shadow duration-300 cursor-pointer`}
+                          className={`p-6 mb-4 rounded-lg shadow-lg ${possibleClass} hover:shadow-xl transition-shadow duration-300 cursor-pointer`}
                           onClick={() => toggleCard(event.eventId)}
                         >
                           <div className='flex items-center justify-between'>
@@ -578,10 +596,19 @@ const Home = () => {
               <div className='space-y-8'>
                 {filteredLiveData?.map((event) => {
                   const over1_5Market = getOver1_5Market(event);
+                  const highProbability = isHighProbabilityMatch(
+                    event.homeTeamName,
+                    event.awayTeamName
+                  );
+
+                  var possibleClass = highProbability
+                    ? 'bg-green-100 border-2 border-green-500'
+                    : 'bg-white';
+
                   return (
                     <div
                       key={event.eventId}
-                      className='p-6 mb-4 rounded-lg shadow-lg bg-white hover:shadow-xl transition-shadow duration-300 cursor-pointer'
+                      className={`p-6 mb-4 rounded-lg shadow-lg ${possibleClass} hover:shadow-xl transition-shadow duration-300 cursor-pointer`}
                       onClick={() => toggleCard(event.eventId)}
                     >
                       <div className='flex items-center justify-between'>
@@ -705,10 +732,19 @@ const Home = () => {
                   <h3 className='text-2xl font-bold mb-4'>{tournament.name}</h3>
                   {tournament.events?.map((event) => {
                     const over1_5Market = getOver1_5Market(event);
+                    const highProbability = isHighProbabilityMatch(
+                      event.homeTeamName,
+                      event.awayTeamName
+                    );
+
+                    var possibleClass = highProbability
+                      ? 'bg-green-100 border-2 border-green-500'
+                      : 'bg-white';
+
                     return (
                       <div
                         key={event.eventId}
-                        className='p-6 mb-4 rounded-lg shadow-lg bg-white hover:shadow-xl transition-shadow duration-300 cursor-pointer'
+                        className={`p-6 mb-4 rounded-lg shadow-lg ${possibleClass} hover:shadow-xl transition-shadow duration-300 cursor-pointer`}
                         onClick={() => toggleCard(event.eventId)}
                       >
                         <div className='flex items-center justify-between'>

@@ -3,8 +3,10 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const url =
-      'https://www.sportybet.com/api/ng/factsCenter/pcUpcomingEvents?sportId=sr%3Asport%3A1&marketId=1%2C18%2C10%2C29%2C11%2C26%2C36%2C14%2C60100&pageSize=100&pageNum=1&_t=0';
+    const now = new Date();
+    const twoHoursLaterTimestamp = now.getTime();
+
+    const url = `https://www.sportybet.com/api/ng/factsCenter/pcUpcomingEvents?sportId=sr%3Asport%3A1&marketId=1%2C18%2C10%2C29%2C11%2C26%2C36%2C14%2C60100&pageSize=100&pageNum=1&option=1&_t=${twoHoursLaterTimestamp}`;
 
     // Make the GET request with the required headers
     const response = await axios.get(url, {
