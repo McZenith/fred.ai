@@ -6,6 +6,7 @@ import {
   FaAngleUp,
   FaInfoCircle,
   FaClipboard,
+  FaTimes,
 } from 'react-icons/fa';
 import { Spinner } from '@/app/components/Spinner';
 import { teamsObjectList } from '../utils/ratedMatch';
@@ -13,22 +14,53 @@ import { teamsObjectList } from '../utils/ratedMatch';
 const Home = () => {
   const [liveData, setLiveData] = useState([]);
   const [upcomingData, setUpcomingData] = useState([]);
-  const [selectedTournament, setSelectedTournament] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortByTime, setSortByTime] = useState('none');
+  const [activeFilters, setActiveFilters] = useState(['desc']);
   const [expandedCard, setExpandedCard] = useState(null);
-  const [expandedTournaments, setExpandedTournaments] = useState(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialFetch, setIsInitialFetch] = useState(true);
   const [activeTab, setActiveTab] = useState('live');
   const [copyMessage, setCopyMessage] = useState('');
+
+  const normalizeMatchPeriod = (period) => {
+    if (!period) return null;
+    // Convert all possible first half indicators to '1H'
+    if (['1H', 'H1', 'FIRST_HALF', '1st', 'First Half', '1'].includes(period))
+      return '1H';
+    // Convert all possible second half indicators to '2H'
+    if (['2H', 'H2', 'SECOND_HALF', '2nd', 'Second Half', '2'].includes(period))
+      return '2H';
+    return period;
+  };
+
+  const filterOptions = [
+    { value: 'asc', label: 'Sort by Time: Ascending', isDefault: false },
+    { value: 'desc', label: 'Sort by Time: Descending', isDefault: true },
+    { value: 'over1.5', label: 'Over 1.5 (Probability)', isDefault: false },
+    { value: 'over2.5', label: 'Over 2.5 (Probability)', isDefault: false },
+    { value: 'over3.5', label: 'Over 3.5 (Probability)', isDefault: false },
+    {
+      value: 'highProbability',
+      label: 'High Probability Matches',
+      isDefault: false,
+    },
+    { value: 'firstHalf', label: 'First Half', isDefault: false },
+    { value: 'secondHalf', label: 'Second Half', isDefault: false },
+    { value: 'halftime', label: 'Half Time', isDefault: false },
+  ];
 
   const fetchLiveData = () => {
     setIsLoading(true);
     fetch('/api/getData', { cache: 'no-store' })
       .then((response) => response.json())
       .then((result) => {
-        setLiveData(result.data);
+        const flattenedData = result.data.flatMap((tournament) =>
+          tournament.events.map((event) => ({
+            ...event,
+            tournamentName: tournament.name,
+          }))
+        );
+        setLiveData(flattenedData);
         setIsLoading(false);
         setIsInitialFetch(false);
       })
@@ -43,7 +75,13 @@ const Home = () => {
     fetch('/api/getUpcomingData', { cache: 'no-store' })
       .then((response) => response.json())
       .then((result) => {
-        setUpcomingData(result.data.tournaments);
+        const flattenedData = result.data.tournaments.flatMap((tournament) =>
+          tournament.events.map((event) => ({
+            ...event,
+            tournamentName: tournament.name,
+          }))
+        );
+        setUpcomingData(flattenedData);
         setIsLoading(false);
       })
       .catch((error) => {
@@ -67,22 +105,27 @@ const Home = () => {
     setExpandedCard(expandedCard === eventId ? null : eventId);
   };
 
-  const toggleTournament = (tournamentName) => {
-    setExpandedTournaments((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(tournamentName)) {
-        newSet.delete(tournamentName);
-      } else {
-        newSet.add(tournamentName);
-      }
-      return newSet;
-    });
-  };
+  const getMatchHalf = (event) => {
+    // Check for halftime first
+    if (event.matchStatus === 'HT' || event.period === 'HT') return 'halftime';
 
-  const availableTournaments =
-    activeTab === 'live'
-      ? [...new Set(liveData?.map((tournament) => tournament.name))]
-      : [...new Set(upcomingData?.map((tournament) => tournament.name))];
+    const normalizedPeriod = normalizeMatchPeriod(event.period);
+
+    // Direct period check
+    if (normalizedPeriod === '1H') return 'firstHalf';
+    if (normalizedPeriod === '2H') return 'secondHalf';
+
+    // If we don't have a clear period indicator, try to use the time
+    if (event.playedSeconds) {
+      const [minutes] = event.playedSeconds.split(':').map(Number);
+      if (!isNaN(minutes)) {
+        if (minutes <= 45) return 'firstHalf';
+        if (minutes > 45) return 'secondHalf';
+      }
+    }
+
+    return null;
+  };
 
   const isHighProbabilityMatch = (homeTeam, awayTeam) => {
     return teamsObjectList?.some((team) => {
@@ -100,808 +143,458 @@ const Home = () => {
       );
     });
   };
+
   const filterHighProbabilityMatches = (event) => {
     const highProbabilityOutcome = event.markets.some((market) =>
       market.outcomes.some(
         (outcome) =>
-          outcome.probability > 0.7 && // Adjust threshold as needed
+          outcome.probability > 0.7 &&
           isHighProbabilityMatch(event.homeTeamName, event.awayTeamName)
       )
     );
     return highProbabilityOutcome;
   };
-  // Function to filter by markets with "Over 1.5" probability > 0.7
-  const filterByOver1_5Probability = (event) => {
-    // Extract current score
-    const currentScore = parseScore(event.setScore); // Helper function to calculate the total score
 
-    // Check if the match has less than 2 goals and "Over 1.5" probability is > 0.7
-    return (
-      currentScore < 2 &&
-      event.markets.some((market) =>
-        market.outcomes.some(
-          (outcome) => outcome.desc === 'Over 1.5' && outcome.probability > 0.7
-        )
-      )
-    );
-  };
-
-  const filterByOver2_5Probability = (event) => {
-    // Extract current score
-    const currentScore = parseScore(event.setScore); // Helper function to calculate the total score
-
-    // Check if the match has less than 2 goals and "Over 1.5" probability is > 0.7
-    return (
-      currentScore < 2 &&
-      event.markets.some((market) =>
-        market.outcomes.some(
-          (outcome) => outcome.desc === 'Over 2.5' && outcome.probability > 0.7
-        )
-      )
-    );
-  };
-
-  const filterByOver3_5Probability = (event) => {
-    // Extract current score
-    const currentScore = parseScore(event.setScore); // Helper function to calculate the total score
-
-    // Check if the match has less than 2 goals and "Over 1.5" probability is > 0.7
-    return (
-      currentScore < 2 &&
-      event.markets.some((market) =>
-        market.outcomes.some(
-          (outcome) => outcome.desc === 'Over 3.5' && outcome.probability > 0.7
-        )
-      )
-    );
-  };
-
-  // Helper function to parse and sum up the score
-  function parseScore(scoreString) {
-    // Assuming the score is in the format "1-0", "2-2", etc.
+  const parseScore = (scoreString) => {
     if (!scoreString || typeof scoreString !== 'string') return 0;
-
     const [homeScore, awayScore] = scoreString
       .split(':')
       ?.map((s) => parseInt(s.trim(), 10));
-
-    // Sum the scores from both teams
     return (
       (isNaN(homeScore) ? 0 : homeScore) + (isNaN(awayScore) ? 0 : awayScore)
     );
-  }
+  };
 
   const filterAndSortData = (data) => {
-    let filteredData = data?.filter(
-      (tournament) =>
-        (!selectedTournament || tournament.name === selectedTournament) &&
-        tournament.events.some(
-          (event) =>
-            event.homeTeamName
-              .toLowerCase()
-              .includes(searchTerm.toLowerCase()) ||
-            event.awayTeamName.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+    if (!data) return [];
+
+    let filteredData = data.filter(
+      (event) =>
+        event.homeTeamName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.awayTeamName.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    if (sortByTime === 'highProbability') {
-      // Filter by high probability matches
-      filteredData = filteredData?.map((tournament) => ({
-        ...tournament,
-        events: tournament.events.filter(filterHighProbabilityMatches),
-      }));
-    } else if (sortByTime === 'over1.5') {
-      // Filter by "Over 1.5" probability > 0.7
-      filteredData = filteredData?.map((tournament) => ({
-        ...tournament,
-        events: tournament.events.filter(filterByOver1_5Probability),
-      }));
-    } else if (sortByTime === 'over2.5') {
-      // Filter by "Over 2.5" probability > 0.7
-      filteredData = filteredData?.map((tournament) => ({
-        ...tournament,
-        events: tournament.events.filter(filterByOver2_5Probability),
-      }));
-    } else if (sortByTime === 'over3.5') {
-      // Filter by "Over 3.5" probability > 0.7
-      filteredData = filteredData?.map((tournament) => ({
-        ...tournament,
-        events: tournament.events.filter(filterByOver3_5Probability),
-      }));
-    } else if (sortByTime !== 'none') {
-      // Flatten the data structure when sorting by time
-      let allEvents = filteredData.flatMap((tournament) =>
-        tournament.events?.map((event) => ({
-          ...event,
-          tournamentName: tournament.name,
-        }))
-      );
+    activeFilters.forEach((filter) => {
+      switch (filter) {
+        case 'highProbability':
+          filteredData = filteredData.filter(filterHighProbabilityMatches);
+          break;
 
-      allEvents = allEvents.filter(
-        (event) =>
-          event.homeTeamName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          event.awayTeamName.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+        case 'firstHalf':
+        case 'secondHalf':
+        case 'halftime':
+          filteredData = filteredData.filter((event) => {
+            const half = getMatchHalf(event);
+            // Debug logging
+            console.log('Event:', {
+              teams: `${event.homeTeamName} vs ${event.awayTeamName}`,
+              period: event.period,
+              normalizedPeriod: normalizeMatchPeriod(event.period),
+              playedTime: event.playedSeconds,
+              detectedHalf: half,
+              expectedHalf: filter,
+              matched: half === filter,
+            });
+            return half === filter;
+          });
+          break;
 
-      allEvents.sort((a, b) => {
+        case 'over1.5':
+        case 'over2.5':
+        case 'over3.5':
+          const threshold = filter.slice(4);
+          filteredData = filteredData.filter((event) => {
+            const currentScore = parseScore(event.setScore);
+            return (
+              currentScore < 2 &&
+              event.markets.some((market) =>
+                market.outcomes.some(
+                  (outcome) =>
+                    outcome.desc === `Over ${threshold}` &&
+                    outcome.probability > 0.7
+                )
+              )
+            );
+          });
+          break;
+      }
+    });
+
+    if (activeFilters.includes('asc') || activeFilters.includes('desc')) {
+      const sortDirection = activeFilters.includes('asc') ? 'asc' : 'desc';
+      filteredData.sort((a, b) => {
         const timeA = new Date(a.estimateStartTime).getTime();
         const timeB = new Date(b.estimateStartTime).getTime();
-        return sortByTime === 'asc' ? timeA - timeB : timeB - timeA;
+        return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
       });
-
-      return allEvents; // Return all sorted events in a flat array
-    } else {
-      // Keep the tournament structure when not sorting by time
-      return filteredData?.map((tournament) => ({
-        ...tournament,
-        events: tournament.events.filter(
-          (event) =>
-            event.homeTeamName
-              .toLowerCase()
-              .includes(searchTerm.toLowerCase()) ||
-            event.awayTeamName.toLowerCase().includes(searchTerm.toLowerCase())
-        ),
-      }));
     }
 
     return filteredData;
   };
 
-      const filteredLiveData = filterAndSortData(liveData);
-      const filteredUpcomingData = filterAndSortData(upcomingData);
+  const toggleFilter = (filterValue) => {
+    setActiveFilters((prev) => {
+      if (filterValue === 'asc' || filterValue === 'desc') {
+        const withoutSorting = prev.filter((f) => f !== 'asc' && f !== 'desc');
+        return prev.includes(filterValue)
+          ? [...withoutSorting, 'desc']
+          : [...withoutSorting, filterValue];
+      }
 
-      const totalMatches =
-        activeTab === 'live'
-          ? Array.isArray(filteredLiveData)
-            ? sortByTime !== 'none'
-              ? filteredLiveData.length // When sorted by time, it's a flat array of events
-              : filteredLiveData.reduce(
-                  (sum, tournament) => sum + (tournament.events?.length || 0),
-                  0
-                )
-            : 0
-          : Array.isArray(filteredUpcomingData)
-          ? sortByTime !== 'none'
-            ? filteredUpcomingData.length // When sorted by time, it's a flat array of events
-            : filteredUpcomingData.reduce(
-                (sum, tournament) => sum + (tournament.events?.length || 0),
-                0
-              )
-          : 0;
-
-      const getOver1_5Market = (event) => {
-        // Check if event.markets exists and is an array
-        if (!Array.isArray(event.markets)) return null;
-
-        const market = event.markets.find((market) =>
-          market.outcomes.some((outcome) => outcome.desc === 'Over 1.5')
+      // Handle half-time filters mutual exclusivity
+      if (['firstHalf', 'secondHalf', 'halftime'].includes(filterValue)) {
+        const withoutHalfFilters = prev.filter(
+          (f) => !['firstHalf', 'secondHalf', 'halftime'].includes(f)
         );
+        return prev.includes(filterValue)
+          ? withoutHalfFilters
+          : [...withoutHalfFilters, filterValue];
+      }
 
-        if (market) {
-          const outcome = market.outcomes.find(
-            (outcome) => outcome.desc === 'Over 1.5'
-          );
+      return prev.includes(filterValue)
+        ? prev.filter((f) => f !== filterValue)
+        : [...prev, filterValue];
+    });
+  };
 
-          if (outcome && outcome.probability > 0.7) {
-            return {
-              marketName: market.name,
-              odds: outcome.odds,
-              probability: outcome.probability,
-            };
-          }
-        }
+  const removeFilter = (filterValue) => {
+    setActiveFilters((prev) => {
+      const newFilters = prev.filter((f) => f !== filterValue);
+      const hasSortFilter = newFilters.some((f) => f === 'asc' || f === 'desc');
+      if (!hasSortFilter && (filterValue === 'asc' || filterValue === 'desc')) {
+        return [...newFilters, 'desc'];
+      }
+      return newFilters;
+    });
+  };
 
-        return null;
-      };
+  const clearFilters = () => {
+    setActiveFilters(['desc']); // Reset to default desc filter
+  };
 
-      const copyHomeTeams = () => {
-        // Get the home team names from the currently filtered matches
-        const dataToCopy = (
-          activeTab === 'live' ? filteredLiveData : filteredUpcomingData
-        )
+  const getOver1_5Market = (event) => {
+    if (!Array.isArray(event.markets)) return null;
 
-          .flatMap((tournament) =>
-            tournament.events?.map((event) => event.homeTeamName)
-          )
-          .join('\n');
+    const market = event.markets.find((market) =>
+      market.outcomes.some((outcome) => outcome.desc === 'Over 1.5')
+    );
 
-        console.log(dataToCopy);
+    if (market) {
+      const outcome = market.outcomes.find(
+        (outcome) => outcome.desc === 'Over 1.5'
+      );
 
-        if (dataToCopy.length > 0) {
-          navigator.clipboard
-            .writeText(dataToCopy)
-            .then(() => {
-              setCopyMessage('Home teams copied!');
-              setTimeout(() => setCopyMessage(''), 3000);
-            })
-            .catch(() => setCopyMessage('Failed to copy.'));
-        } else {
-          setCopyMessage('No matches to copy.');
+      if (outcome && outcome.probability > 0.7) {
+        return {
+          marketName: market.name,
+          odds: outcome.odds,
+          probability: outcome.probability,
+        };
+      }
+    }
+
+    return null;
+  };
+
+  const copyHomeTeams = () => {
+    const dataToCopy = (
+      activeTab === 'live'
+        ? filterAndSortData(liveData)
+        : filterAndSortData(upcomingData)
+    )
+      ?.map((event) => event.homeTeamName)
+      .join('\n');
+
+    if (dataToCopy?.length > 0) {
+      navigator.clipboard
+        .writeText(dataToCopy)
+        .then(() => {
+          setCopyMessage('Home teams copied!');
           setTimeout(() => setCopyMessage(''), 3000);
-        }
-      };
+        })
+        .catch(() => setCopyMessage('Failed to copy.'));
+    } else {
+      setCopyMessage('No matches to copy.');
+      setTimeout(() => setCopyMessage(''), 3000);
+    }
+  };
 
-      return (
-        <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen flex items-center justify-center'>
-          <div className='container mx-auto px-4 py-8'>
-            <h1 className='text-5xl font-bold text-center mb-8 text-blue-700'>
-              ⚽ Fred.ai
-            </h1>
+  const filteredData =
+    activeTab === 'live'
+      ? filterAndSortData(liveData)
+      : filterAndSortData(upcomingData);
 
-            <div className='mb-4'>
-              <button
-                className={`py-2 px-4 rounded-lg font-semibold transition-colors duration-300 relative mr-4 ${
-                  activeTab === 'live'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-blue-100'
-                }`}
-                onClick={() => {
-                  setActiveTab('live');
-                  setSelectedTournament(null);
-                  setSortByTime('none');
-                  fetchLiveData();
-                }}
-              >
-                Live Matches
-                {activeTab === 'live' && totalMatches > 0 && (
-                  <span className='absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold py-1 px-2 rounded-full'>
-                    {totalMatches}
-                  </span>
-                )}
-              </button>
-              <button
-                className={`py-2 px-4 rounded-lg font-semibold transition-colors duration-300 relative ${
-                  activeTab === 'upcoming'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-blue-100'
-                }`}
-                onClick={() => {
-                  setActiveTab('upcoming');
-                  setSelectedTournament(null);
-                  setSortByTime('none');
-                  fetchUpcomingData();
-                }}
-              >
-                Upcoming Matches
-                {activeTab === 'upcoming' && totalMatches > 0 && (
-                  <span className='absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold py-1 px-2 rounded-full'>
-                    {totalMatches}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={copyHomeTeams}
-                className='py-2 px-4 rounded-lg font-semibold transition-colors duration-300 relative mr-4 ml-4 bg-blue-600 text-white'
-              >
-                <FaClipboard className='mr-2 inline' />
-                Copy Home Teams
-              </button>
-              {copyMessage && (
-                <p className='mt-2 text-sm text-green-500'>{copyMessage}</p>
-              )}
-            </div>
+  const totalMatches = filteredData?.length || 0;
 
-            <div className='bg-white rounded-xl shadow-xl p-8 mb-8'>
-              <div className='flex flex-col md:flex-row items-center justify-between mb-8'>
-                <div className='relative mb-4 md:mb-0 md:mr-4 flex-1'>
-                  <input
-                    type='text'
-                    placeholder='Search teams...'
-                    className='pl-12 pr-4 py-3 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition'
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                  <FaSearch className='w-6 h-6 absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400' />
-                </div>
-                <div className='relative'>
-                  <select
-                    className='pl-4 pr-10 py-3 border border-gray-300 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition w-full md:w-auto'
-                    value={sortByTime}
-                    onChange={(e) => setSortByTime(e.target.value)}
-                  >
-                    <option value='none'>No Time Sorting</option>
-                    <option value='asc'>Sort by Time: Ascending</option>
-                    <option value='desc'>Sort by Time: Descending</option>
-                    <option value='over1.5'>
-                      Filter by Over 1.5 (Probability)
-                    </option>
-                    <option value='over2.5'>
-                      Filter by Over 2.5 (Probability)
-                    </option>
-                    <option value='over3.5'>
-                      Filter by Over 3.5 (Probability)
-                    </option>
-                    <option value='highProbability'>
-                      Filter by High Probability Matches
-                    </option>
-                  </select>
-                  <FaAngleDown className='w-5 h-5 absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none' />
-                </div>
-              </div>
+  return (
+    <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen flex items-center justify-center'>
+      <div className='container mx-auto px-4 py-8'>
+        <h1 className='text-5xl font-bold text-center mb-8 text-blue-700'>
+          ⚽ Fred.ai
+        </h1>
 
-              {sortByTime === 'none' && (
-                <div className='flex overflow-x-auto space-x-2 py-2'>
-                  <button
-                    className={`py-2 px-4 whitespace-nowrap rounded-lg font-semibold transition-colors duration-300 ${
-                      !selectedTournament
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-700 hover:bg-blue-100'
-                    }`}
-                    onClick={() => {
-                      setSelectedTournament(null);
-                      setExpandedTournaments(new Set());
-                    }}
-                  >
-                    All Tournaments
-                  </button>
-                  {availableTournaments?.map((tournamentName) => (
-                    <button
-                      key={tournamentName}
-                      className={`py-2 px-4 whitespace-nowrap rounded-lg font-semibold transition-colors duration-300 ${
-                        selectedTournament === tournamentName
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white text-gray-700 hover:bg-blue-100'
-                      }`}
-                      onClick={() => {
-                        setSelectedTournament(tournamentName);
-                        setExpandedTournaments(new Set([tournamentName]));
-                      }}
-                    >
-                      {tournamentName}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {sortByTime === 'none' && (
-              <div>
-                <h2 className='text-3xl font-semibold mb-6 text-center'>
-                  All Matches
-                </h2>
-                <div className='space-y-8'>
-                  {(activeTab === 'live'
-                    ? filteredLiveData
-                    : filteredUpcomingData
-                  )?.map((tournament) => (
-                    <div key={tournament.name}>
-                      <div
-                        className='flex items-center justify-between cursor-pointer'
-                        onClick={() => toggleTournament(tournament.name)}
-                      >
-                        <h2 className='text-3xl font-semibold mb-6'>
-                          {tournament.name}
-                        </h2>
-                        <button>
-                          {expandedTournaments.has(tournament.name) ? (
-                            <FaAngleUp className='text-blue-500' />
-                          ) : (
-                            <FaAngleDown className='text-blue-500' />
-                          )}
-                        </button>
-                      </div>
-
-                      {expandedTournaments.has(tournament.name) &&
-                        tournament.events?.map((event) => {
-                          const over1_5Market = getOver1_5Market(event);
-                          const highProbability = isHighProbabilityMatch(
-                            event.homeTeamName,
-                            event.awayTeamName
-                          );
-
-                          var possibleClass = highProbability
-                            ? 'bg-green-100 border-2 border-green-500'
-                            : 'bg-white';
-
-                          return (
-                            <div
-                              key={event.eventId}
-                              className={`p-6 mb-4 rounded-lg shadow-lg ${possibleClass} hover:shadow-xl transition-shadow duration-300 cursor-pointer`}
-                              onClick={() => toggleCard(event.eventId)}
-                            >
-                              <div className='flex items-center justify-between'>
-                                <p className='text-xl font-bold mb-2'>
-                                  {event.homeTeamName} vs {event.awayTeamName}
-                                </p>
-                                <p className='text-sm text-gray-500'>
-                                  Markets Available: {event.markets.length}
-                                </p>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleCard(event.eventId);
-                                  }}
-                                  className='focus:outline-none text-blue-500'
-                                >
-                                  {expandedCard === event.eventId ? (
-                                    <FaAngleUp className='w-6 h-6' />
-                                  ) : (
-                                    <FaAngleDown className='w-6 h-6' />
-                                  )}
-                                </button>
-                              </div>
-                              <div className='text-sm text-gray-700 mb-4'>
-                                {activeTab === 'live' && (
-                                  <>
-                                    <p>
-                                      Status: {event.matchStatus} | Period:{' '}
-                                      {event.period}
-                                    </p>
-                                    <p>
-                                      Score:{' '}
-                                      <span className='text-blue-600 font-semibold'>
-                                        {event.setScore}
-                                      </span>
-                                    </p>
-                                    <p>
-                                      Played Time:{' '}
-                                      <span className='text-blue-600 font-semibold'>
-                                        {event.playedSeconds}
-                                      </span>
-                                    </p>
-                                  </>
-                                )}
-                                <p>
-                                  Estimated Start Time:{' '}
-                                  <span className='text-gray-500'>
-                                    {new Date(
-                                      event.estimateStartTime
-                                    ).toLocaleString()}
-                                  </span>
-                                </p>
-                                {over1_5Market && (
-                                  <p className='text-sm text-blue-600 font-semibold mb-4'>
-                                    Market: {over1_5Market.marketName} | Odds:{' '}
-                                    {over1_5Market.odds} | Probability:{' '}
-                                    {over1_5Market.probability}
-                                  </p>
-                                )}
-                              </div>
-
-                              {expandedCard === event.eventId && (
-                                <div className='mt-4'>
-                                  <h3 className='text-lg font-semibold mb-4 flex items-center'>
-                                    <FaInfoCircle className='mr-2 text-blue-500' />
-                                    Betting Markets
-                                  </h3>
-                                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
-                                    {event.markets?.map((market) => (
-                                      <div
-                                        key={market.id}
-                                        className='border-t pt-4'
-                                      >
-                                        <h4 className='font-semibold mb-1 text-gray-900'>
-                                          {market.name}
-                                        </h4>
-                                        <ul className='list-disc ml-5'>
-                                          {market.outcomes?.map((outcome) => (
-                                            <li
-                                              key={outcome.id}
-                                              className={`mb-2 ${
-                                                outcome.probability > 0.6
-                                                  ? 'text-blue-600 font-semibold'
-                                                  : ''
-                                              }`}
-                                            >
-                                              {outcome.desc}: Odds{' '}
-                                              <span className='font-semibold'>
-                                                {outcome.odds}
-                                              </span>
-                                              <>
-                                                , Probability:{' '}
-                                                <span className='font-semibold'>
-                                                  {outcome.probability}
-                                                </span>
-                                              </>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  ))}
-                </div>
-              </div>
+        <div className='mb-4'>
+          <button
+            className={`py-2 px-4 rounded-lg font-semibold transition-colors duration-300 relative mr-4 ${
+              activeTab === 'live'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-blue-100'
+            }`}
+            onClick={() => {
+              setActiveTab('live');
+              fetchLiveData();
+            }}
+          >
+            Live Matches
+            {activeTab === 'live' && totalMatches > 0 && (
+              <span className='absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold py-1 px-2 rounded-full'>
+                {totalMatches}
+              </span>
             )}
+          </button>
+          <button
+            className={`py-2 px-4 rounded-lg font-semibold transition-colors duration-300 relative ${
+              activeTab === 'upcoming'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-blue-100'
+            }`}
+            onClick={() => {
+              setActiveTab('upcoming');
+              fetchUpcomingData();
+            }}
+          >
+            Upcoming Matches
+            {activeTab === 'upcoming' && totalMatches > 0 && (
+              <span className='absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold py-1 px-2 rounded-full'>
+                {totalMatches}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={copyHomeTeams}
+            className='py-2 px-4 rounded-lg font-semibold transition-colors duration-300 relative mr-4 ml-4 bg-blue-600 text-white'
+          >
+            <FaClipboard className='mr-2 inline' />
+            Copy Home Teams
+          </button>
+          {copyMessage && (
+            <p className='mt-2 text-sm text-green-500'>{copyMessage}</p>
+          )}
+        </div>
 
-            {/* When sorting by time, just display a header and all matches flat */}
-            {sortByTime !== 'none' &&
-              sortByTime !== 'over1.5' &&
-              sortByTime !== 'over2.5' &&
-              sortByTime !== 'over3.5' &&
-              sortByTime !== 'highProbability' && (
-                <div>
-                  <h2 className='text-3xl font-semibold mb-6 text-center'>
-                    Sorted by Time
-                  </h2>
-                  {filteredLiveData.length === 0 &&
-                    isInitialFetch &&
-                    isLoading && (
-                      <div className='flex justify-center items-center mt-12'>
-                        <Spinner className='w-12 h-12 text-blue-500' />
-                      </div>
+        <div className='bg-white rounded-xl shadow-xl p-8 mb-8'>
+          <div className='flex flex-col space-y-4'>
+            <div className='relative flex-1'>
+              <input
+                type='text'
+                placeholder='Search teams...'
+                className='pl-12 pr-4 py-3 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition'
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <FaSearch className='w-6 h-6 absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400' />
+            </div>
+
+            <div className='flex flex-wrap gap-2'>
+              {filterOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => toggleFilter(option.value)}
+                  className={`px-4 py-2 rounded-lg transition-colors duration-200 ${
+                    activeFilters.includes(option.value)
+                      ? 'bg-blue-600 text-white'
+                      : option.isDefault
+                      ? 'bg-blue-50 border-2 border-blue-300 text-blue-700 hover:bg-blue-100'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  } ${
+                    option.isDefault && !activeFilters.includes(option.value)
+                      ? 'ring-2 ring-blue-200'
+                      : ''
+                  }`}
+                >
+                  {option.isDefault &&
+                    !activeFilters.includes(option.value) && (
+                      <span className='text-xs font-semibold text-blue-500 mr-1'>
+                        (Default){' '}
+                      </span>
                     )}
-                  <div className='space-y-8'>
-                    {filteredLiveData?.map((event) => {
-                      const over1_5Market = getOver1_5Market(event);
-                      const highProbability = isHighProbabilityMatch(
-                        event.homeTeamName,
-                        event.awayTeamName
-                      );
+                  {option.label}
+                </button>
+              ))}
+            </div>
 
-                      var possibleClass = highProbability
-                        ? 'bg-green-100 border-2 border-green-500'
-                        : 'bg-white';
-
-                      return (
-                        <div
-                          key={event.eventId}
-                          className={`p-6 mb-4 rounded-lg shadow-lg ${possibleClass} hover:shadow-xl transition-shadow duration-300 cursor-pointer`}
-                          onClick={() => toggleCard(event.eventId)}
-                        >
-                          <div className='flex items-center justify-between'>
-                            <p className='text-xl font-bold mb-2'>
-                              {event.homeTeamName} vs {event.awayTeamName}
-                            </p>
-                            <p className='text-sm text-gray-500'>
-                              Markets Available: {event.markets?.length}
-                            </p>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleCard(event.eventId);
-                              }}
-                              className='focus:outline-none text-blue-500'
-                            >
-                              {expandedCard === event.eventId ? (
-                                <FaAngleUp className='w-6 h-6' />
-                              ) : (
-                                <FaAngleDown className='w-6 h-6' />
-                              )}
-                            </button>
-                          </div>
-                          <div className='text-sm text-gray-700 mb-4'>
-                            {activeTab === 'live' && (
-                              <>
-                                <p>
-                                  Status: {event.matchStatus} | Period:{' '}
-                                  {event.period}
-                                </p>
-                                <p>
-                                  Score:{' '}
-                                  <span className='text-blue-600 font-semibold'>
-                                    {event.setScore}
-                                  </span>
-                                </p>
-                                <p>
-                                  Played Time:{' '}
-                                  <span className='text-blue-600 font-semibold'>
-                                    {event.playedSeconds}
-                                  </span>
-                                </p>
-                              </>
-                            )}
-                            <p>
-                              Estimated Start Time:{' '}
-                              <span className='text-gray-500'>
-                                {new Date(
-                                  event.estimateStartTime
-                                ).toLocaleString()}
-                              </span>
-                            </p>
-                            {over1_5Market && (
-                              <p className='text-sm text-blue-600 font-semibold mb-4'>
-                                Market: {over1_5Market.marketName} | Odds:{' '}
-                                {over1_5Market.odds} | Probability:{' '}
-                                {over1_5Market.probability}
-                              </p>
-                            )}
-                          </div>
-
-                          {expandedCard === event.eventId && (
-                            <div className='mt-4'>
-                              <h3 className='text-lg font-semibold mb-4 flex items-center'>
-                                <FaInfoCircle className='mr-2 text-blue-500' />
-                                Betting Markets
-                              </h3>
-                              <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
-                                {event.markets?.map((market) => (
-                                  <div
-                                    key={market.id}
-                                    className='border-t pt-4'
-                                  >
-                                    <h4 className='font-semibold mb-1 text-gray-900'>
-                                      {market.name}
-                                    </h4>
-                                    <ul className='list-disc ml-5'>
-                                      {market.outcomes?.map((outcome) => (
-                                        <li
-                                          key={outcome.id}
-                                          className={`mb-2 ${
-                                            outcome.probability > 0.6
-                                              ? 'text-blue-600 font-semibold'
-                                              : ''
-                                          }`}
-                                        >
-                                          {outcome.desc}: Odds{' '}
-                                          <span className='font-semibold'>
-                                            {outcome.odds}
-                                          </span>
-                                          <>
-                                            , Probability:{' '}
-                                            <span className='font-semibold'>
-                                              {outcome.probability}
-                                            </span>
-                                          </>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-            {/* Filter by Over 1.5 (Probability > 0.7) */}
-            {(sortByTime === 'over1.5' ||
-              sortByTime === 'over2.5' ||
-              sortByTime === 'over3.5' ||
-              sortByTime === 'highProbability') && (
-              <div>
-                <h2 className='text-3xl font-semibold mb-6 text-center'>
-                  Filtered by {sortByTime}
-                </h2>
-                <div className='space-y-8'>
-                  {(activeTab === 'live'
-                    ? filteredLiveData
-                    : filteredUpcomingData
-                  )?.map((tournament) => (
-                    <div key={tournament.name}>
-                      <h3 className='text-2xl font-bold mb-4'>
-                        {tournament.name}
-                      </h3>
-                      {tournament.events?.map((event) => {
-                        const over1_5Market = getOver1_5Market(event);
-                        const highProbability = isHighProbabilityMatch(
-                          event.homeTeamName,
-                          event.awayTeamName
-                        );
-
-                        var possibleClass = highProbability
-                          ? 'bg-green-100 border-2 border-green-500'
-                          : 'bg-white';
-
-                        return (
-                          <div
-                            key={event.eventId}
-                            className={`p-6 mb-4 rounded-lg shadow-lg ${possibleClass} hover:shadow-xl transition-shadow duration-300 cursor-pointer`}
-                            onClick={() => toggleCard(event.eventId)}
-                          >
-                            <div className='flex items-center justify-between'>
-                              <p className='text-xl font-bold mb-2'>
-                                {event.homeTeamName} vs {event.awayTeamName}
-                              </p>
-                              <p className='text-sm text-gray-500'>
-                                Markets Available: {event.markets.length}
-                              </p>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleCard(event.eventId);
-                                }}
-                                className='focus:outline-none text-blue-500'
-                              >
-                                {expandedCard === event.eventId ? (
-                                  <FaAngleUp className='w-6 h-6' />
-                                ) : (
-                                  <FaAngleDown className='w-6 h-6' />
-                                )}
-                              </button>
-                            </div>
-                            <div className='text-sm text-gray-700 mb-4'>
-                              {activeTab === 'live' && (
-                                <>
-                                  <p>
-                                    Status: {event.matchStatus} | Period:{' '}
-                                    {event.period}
-                                  </p>
-                                  <p>
-                                    Score:{' '}
-                                    <span className='text-blue-600 font-semibold'>
-                                      {event.setScore}
-                                    </span>
-                                  </p>
-                                  <p>
-                                    Played Time:{' '}
-                                    <span className='text-blue-600 font-semibold'>
-                                      {event.playedSeconds}
-                                    </span>
-                                  </p>
-                                </>
-                              )}
-                              <p>
-                                Estimated Start Time:{' '}
-                                <span className='text-gray-500'>
-                                  {new Date(
-                                    event.estimateStartTime
-                                  ).toLocaleString()}
-                                </span>
-                              </p>
-                              {over1_5Market && (
-                                <p className='text-sm text-blue-600 font-semibold mb-4'>
-                                  Market: {over1_5Market.marketName} | Odds:{' '}
-                                  {over1_5Market.odds} | Probability:{' '}
-                                  {over1_5Market.probability}
-                                </p>
-                              )}
-                            </div>
-
-                            {expandedCard === event.eventId && (
-                              <div className='mt-4'>
-                                <h3 className='text-lg font-semibold mb-4 flex items-center'>
-                                  <FaInfoCircle className='mr-2 text-blue-500' />
-                                  Betting Markets
-                                </h3>
-                                <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
-                                  {event.markets?.map((market) => (
-                                    <div
-                                      key={market.id}
-                                      className='border-t pt-4'
-                                    >
-                                      <h4 className='font-semibold mb-1 text-gray-900'>
-                                        {market.name}
-                                      </h4>
-                                      <ul className='list-disc ml-5'>
-                                        {market.outcomes?.map((outcome) => (
-                                          <li
-                                            key={outcome.id}
-                                            className={`mb-2 ${
-                                              outcome.probability > 0.7
-                                                ? 'text-blue-600 font-semibold'
-                                                : ''
-                                            }`}
-                                          >
-                                            {outcome.desc}: Odds{' '}
-                                            <span className='font-semibold'>
-                                              {outcome.odds}
-                                            </span>
-                                            <>
-                                              , Probability:{' '}
-                                              <span className='font-semibold'>
-                                                {outcome.probability}
-                                              </span>
-                                            </>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
+            {activeFilters.length > 0 && (
+              <div className='flex flex-wrap gap-2 mt-4'>
+                <span className='text-sm text-gray-500'>Active Filters:</span>
+                {activeFilters.map((filter) => (
+                  <span
+                    key={filter}
+                    className='inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm'
+                  >
+                    {filterOptions.find((opt) => opt.value === filter)?.label}
+                    <button
+                      onClick={() => removeFilter(filter)}
+                      className='ml-2 hover:text-blue-900'
+                    >
+                      <FaTimes className='w-3 h-3' />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  onClick={clearFilters}
+                  className='text-sm text-red-600 hover:text-red-800'
+                >
+                  Clear All
+                </button>
               </div>
             )}
           </div>
         </div>
-      );
+
+        <div className='space-y-8'>
+          {isLoading && isInitialFetch ? (
+            <div className='flex justify-center items-center mt-12'>
+              <Spinner className='w-12 h-12 text-blue-500' />
+            </div>
+          ) : (
+            filteredData?.map((event) => {
+              const over1_5Market = getOver1_5Market(event);
+              const highProbability = isHighProbabilityMatch(
+                event.homeTeamName,
+                event.awayTeamName
+              );
+              const matchHalf = getMatchHalf(event);
+              const cardClass = `p-6 mb-4 rounded-lg shadow-lg ${
+                highProbability
+                  ? 'bg-green-100 border-2 border-green-500'
+                  : 'bg-white'
+              } hover:shadow-xl transition-shadow duration-300 cursor-pointer`;
+
+              return (
+                <div
+                  key={event.eventId}
+                  className={cardClass}
+                  onClick={() => toggleCard(event.eventId)}
+                >
+                  <div className='flex items-center justify-between'>
+                    <div>
+                      <p className='text-xl font-bold mb-2'>
+                        {event.homeTeamName} vs {event.awayTeamName}
+                      </p>
+                      <p className='text-sm text-gray-600'>
+                        Tournament: {event.tournamentName}
+                      </p>
+                      {matchHalf && (
+                        <span className='inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium mt-1'>
+                          {matchHalf === 'firstHalf'
+                            ? '1st Half'
+                            : matchHalf === 'secondHalf'
+                            ? '2nd Half'
+                            : 'Half Time'}
+                        </span>
+                      )}
+                    </div>
+                    <p className='text-sm text-gray-500'>
+                      Markets Available: {event.markets?.length}
+                    </p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCard(event.eventId);
+                      }}
+                      className='focus:outline-none text-blue-500'
+                    >
+                      {expandedCard === event.eventId ? (
+                        <FaAngleUp className='w-6 h-6' />
+                      ) : (
+                        <FaAngleDown className='w-6 h-6' />
+                      )}
+                    </button>
+                  </div>
+
+                  <div className='text-sm text-gray-700 mb-4'>
+                    {activeTab === 'live' && (
+                      <>
+                        <p>
+                          Status: {event.matchStatus} | Period: {event.period}
+                        </p>
+                        <p>
+                          Score:{' '}
+                          <span className='text-blue-600 font-semibold'>
+                            {event.setScore}
+                          </span>
+                        </p>
+                        <p>
+                          Played Time:{' '}
+                          <span className='text-blue-600 font-semibold'>
+                            {event.playedSeconds || '0:00'}
+                          </span>
+                        </p>
+                      </>
+                    )}
+                    <p>
+                      Estimated Start Time:{' '}
+                      <span className='text-gray-500'>
+                        {new Date(event.estimateStartTime).toLocaleString()}
+                      </span>
+                    </p>
+                    {over1_5Market && (
+                      <p className='text-sm text-blue-600 font-semibold mb-4'>
+                        Market: {over1_5Market.marketName} | Odds:{' '}
+                        {over1_5Market.odds} | Probability:{' '}
+                        {over1_5Market.probability}
+                      </p>
+                    )}
+                  </div>
+
+                  {expandedCard === event.eventId && (
+                    <div className='mt-4'>
+                      <h3 className='text-lg font-semibold mb-4 flex items-center'>
+                        <FaInfoCircle className='mr-2 text-blue-500' />
+                        Betting Markets
+                      </h3>
+                      <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+                        {event.markets?.map((market) => (
+                          <div key={market.id} className='border-t pt-4'>
+                            <h4 className='font-semibold mb-1 text-gray-900'>
+                              {market.name}
+                            </h4>
+                            <ul className='list-disc ml-5'>
+                              {market.outcomes?.map((outcome) => (
+                                <li
+                                  key={outcome.id}
+                                  className={`mb-2 ${
+                                    outcome.probability > 0.6
+                                      ? 'text-blue-600 font-semibold'
+                                      : ''
+                                  }`}
+                                >
+                                  {outcome.desc}: Odds{' '}
+                                  <span className='font-semibold'>
+                                    {outcome.odds}
+                                  </span>
+                                  <>
+                                    , Probability:{' '}
+                                    <span className='font-semibold'>
+                                      {outcome.probability}
+                                    </span>
+                                  </>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default Home;

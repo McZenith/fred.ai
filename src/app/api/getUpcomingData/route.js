@@ -10,7 +10,7 @@ export async function GET() {
     const requests = [];
 
     for (let pageNum = 1; pageNum <= pageLimit; pageNum++) {
-      const url = `https://www.sportybet.com/api/ng/factsCenter/pcUpcomingEvents?sportId=sr%3Asport%3A1&marketId=1%2C18%2C10%2C29%2C11%2C26%2C36%2C14%2C60100&pageSize=${pageSize}&pageNum=${pageNum}&option=1&timeline=24&_t=1729890685529`;
+      const url = `https://www.sportybet.com/api/ng/factsCenter/pcUpcomingEvents?sportId=sr%3Asport%3A1&marketId=1%2C18%2C10%2C29%2C11%2C26%2C36%2C14%2C60100&pageSize=${pageSize}&pageNum=${pageNum}&option=1&timeline=24&_t=1729977085000`;
 
       // Create a GET request promise for each page
       requests.push(
