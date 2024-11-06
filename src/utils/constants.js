@@ -4,21 +4,18 @@ export const MATCH_PERIODS = {
   HALF_TIME: 'halftime',
 };
 
+// In utils/constants.js
 export const filterOptions = [
-  { value: 'asc', label: 'Sort by Time: Ascending', isDefault: false },
-  { value: 'desc', label: 'Sort by Time: Descending', isDefault: true },
-  { value: 'over1.5', label: 'Over 1.5 (Probability)', isDefault: false },
-  { value: 'over2.5', label: 'Over 2.5 (Probability)', isDefault: false },
-  { value: 'over3.5', label: 'Over 3.5 (Probability)', isDefault: false },
-  {
-    value: 'highProbability',
-    label: 'High Probability Matches',
-    isDefault: false,
-  },
-  { value: 'firstHalf', label: 'First Half', isDefault: false },
-  { value: 'secondHalf', label: 'Second Half', isDefault: false },
-  { value: 'halftime', label: 'Half Time', isDefault: false },
-  { value: 'inCart', label: 'In Cart', isDefault: false },
+  { value: 'desc', label: 'Latest First', isDefault: true },
+  { value: 'asc', label: 'Oldest First' },
+  { value: 'firstHalf', label: '1st Half' },
+  { value: 'secondHalf', label: '2nd Half' },
+  { value: 'halftime', label: 'Half Time' },
+  { value: 'highProbability', label: 'High Probability' },
+  { value: 'inCart', label: 'In Cart' },
+  { value: 'over1.5', label: 'Over 1.5' },
+  { value: 'over2.5', label: 'Over 2.5' },
+  { value: 'over3.5', label: 'Over 3.5' },
 ];
 
 export const FILTER_GROUPS = {

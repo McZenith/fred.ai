@@ -78,21 +78,26 @@ export const getMatchHalf = (event) => {
   return null;
 };
 
-export const isHighProbabilityMatch = (homeTeam, awayTeam, teamsObjectList) => {
-  return teamsObjectList?.some((team) => {
-    const homeTeamExists =
-      typeof homeTeam === 'string' && homeTeam.includes(team.homeTeam);
-    const awayTeamExists =
-      typeof awayTeam === 'string' && awayTeam.includes(team.awayTeam);
-    const teamHomeExists =
-      typeof team.homeTeam === 'string' && team.homeTeam.includes(homeTeam);
-    const teamAwayExists =
-      typeof team.awayTeam === 'string' && team.awayTeam.includes(awayTeam);
+export const isHighProbabilityMatch = (event) => {
+  // Check if current goals are over 1
+  const currentGoals = event.setScore
+    ?.split(':')
+    .reduce((a, b) => parseInt(a) + parseInt(b), 0) || 0;
+  const isOverOneGoal = currentGoals > 1;
 
-    return (
-      (homeTeamExists || teamHomeExists) && (awayTeamExists || teamAwayExists)
-    );
-  });
+  // Check if it's first half
+  const isFirstHalf = event.matchStatus === 'H1';
+
+  // Check Over 1.5 market probability
+  const over1_5Market = event.markets?.find(
+    m => m.desc === 'Over/Under' && m.specifier === 'total=1.5'
+  );
+  const over1_5Probability = over1_5Market?.outcomes?.[0]?.probability
+    ? parseFloat(over1_5Market.outcomes[0].probability) * 100
+    : 0;
+  const isHighOver1_5Probability = over1_5Probability > 70;
+
+  return isOverOneGoal && isFirstHalf && isHighOver1_5Probability;
 };
 
 export const getOver1_5Market = (event) => {
