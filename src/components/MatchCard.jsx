@@ -1,5 +1,16 @@
-import React, { useState, useCallback } from 'react';
-import { Card, CardContent } from '@/components/ui/Card';
+import React, { useState } from 'react';
+
+import {
+  Card,
+  CardContent,
+  ScrollArea,
+  Tabs,
+  Badge,
+  Button,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/Card';
 import {
   ChevronDown,
   ChevronUp,
@@ -25,26 +36,27 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useCart } from '../hooks/useCart';
-
+import TournamentTable from './TournamentTable';
+import PredictionTab from './PredictionTab';
 // Utility Components
 const StatComparison = ({ label, home, away, total }) => {
   const homePercent = (home / total) * 100;
   const awayPercent = (away / total) * 100;
 
   return (
-    <div className='mb-3'>
-      <div className='flex justify-between text-xs md:text-sm mb-1'>
-        <span className='font-medium'>{home}</span>
-        <span className='text-gray-600'>{label}</span>
-        <span className='font-medium'>{away}</span>
+    <div className='bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300'>
+      <div className='flex justify-between text-sm mb-3'>
+        <span className='font-semibold text-blue-600'>{home}</span>
+        <span className='font-medium text-gray-600'>{label}</span>
+        <span className='font-semibold text-red-600'>{away}</span>
       </div>
-      <div className='flex gap-0.5 h-1.5'>
+      <div className='flex gap-0.5 h-2.5'>
         <div
-          className='bg-blue-500 rounded-l transition-all duration-500'
+          className='bg-gradient-to-r from-blue-600 to-blue-400 rounded-l-full transition-all duration-500'
           style={{ width: `${homePercent}%` }}
         />
         <div
-          className='bg-red-500 rounded-r transition-all duration-500'
+          className='bg-gradient-to-r from-red-400 to-red-600 rounded-r-full transition-all duration-500'
           style={{ width: `${awayPercent}%` }}
         />
       </div>
@@ -53,13 +65,13 @@ const StatComparison = ({ label, home, away, total }) => {
 };
 
 const StatItem = ({ label, value, icon: Icon }) => (
-  <div className='flex items-center gap-2 p-2'>
-    <div className='p-2 bg-gray-100 rounded-full'>
-      <Icon size={14} className='text-gray-600' />
+  <div className='flex items-center gap-3 p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300'>
+    <div className='p-2.5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg'>
+      <Icon size={18} className='text-gray-700' />
     </div>
     <div>
-      <div className='text-xs text-gray-500'>{label}</div>
-      <div className='font-semibold'>{value}</div>
+      <div className='text-sm font-medium text-gray-500'>{label}</div>
+      <div className='text-lg font-semibold text-gray-900'>{value}</div>
     </div>
   </div>
 );
@@ -68,41 +80,39 @@ const TimelineEvent = ({ event }) => {
   const getEventIcon = (type) => {
     switch (type.toLowerCase()) {
       case 'shotontarget':
-        return <Target className='text-green-500' size={16} />;
+        return <Target className='text-green-500' size={18} />;
       case 'shotofftarget':
-        return <Target className='text-gray-400' size={16} />;
+        return <Target className='text-gray-400' size={18} />;
       case 'corner':
-        return <Flag className='text-blue-500' size={16} />;
+        return <Flag className='text-blue-500' size={18} />;
       case 'card':
         return (
           <div
-            className={`w-3 h-4 ${
-              event.card === 'yellow' ? 'bg-yellow-400' : 'bg-red-600'
-            } rounded-sm`}
+            className={`w-3.5 h-4.5 ${
+              event.card === 'yellow'
+                ? 'bg-gradient-to-br from-yellow-400 to-yellow-500'
+                : 'bg-gradient-to-br from-red-500 to-red-600'
+            } rounded-sm shadow-sm`}
           />
         );
-      case 'throwin':
-        return <Circle className='text-gray-400' size={12} />;
-      case 'freekick':
-        return <Circle className='text-blue-400' size={12} />;
-      case 'goal_kick':
-        return <Circle className='text-purple-400' size={12} />;
       default:
-        return <Circle className='text-gray-400' size={12} />;
+        return <Circle className='text-gray-400' size={14} />;
     }
   };
 
   return (
-    <div className='flex items-center gap-3 relative pl-6 pb-4'>
-      <div className='absolute left-0 top-0 bottom-0 w-px bg-gray-200' />
-      <div className='absolute left-[-4px] bg-white'>
+    <div className='flex items-center gap-4 relative pl-8 pb-5 group'>
+      <div className='absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-gray-200 to-gray-300 group-hover:from-blue-200 group-hover:to-blue-300 transition-colors duration-300' />
+      <div className='absolute left-[-8px] bg-white p-1 rounded-full shadow-sm border border-gray-100 group-hover:border-blue-200 transition-colors duration-300'>
         {getEventIcon(event.type)}
       </div>
-      <div className='text-xs font-medium text-gray-500 w-8'>{event.time}'</div>
+      <div className='text-sm font-medium text-gray-500 w-12'>
+        {event.time}'
+      </div>
       <div className='flex-1'>
-        <div className='text-sm'>
+        <div className='text-sm group-hover:text-gray-900 transition-colors duration-300'>
           <span
-            className={`font-medium ${
+            className={`font-semibold ${
               event.team === 'home' ? 'text-blue-600' : 'text-red-600'
             }`}
           >
@@ -111,7 +121,9 @@ const TimelineEvent = ({ event }) => {
           {' - '}
           {event.name}
           {event.player?.name && (
-            <span className='font-medium ml-1'>{event.player.name}</span>
+            <span className='font-medium ml-1 text-gray-700'>
+              {event.player.name}
+            </span>
           )}
         </div>
       </div>
@@ -123,14 +135,18 @@ const MomentumChart = ({ data, homeTeam, awayTeam }) => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className='bg-white p-2 shadow-lg rounded-lg border text-xs'>
-          <p className='font-medium'>Minute {label}</p>
-          <p className='text-blue-600'>
-            {homeTeam}: {payload[0].value}
-          </p>
-          <p className='text-red-600'>
-            {awayTeam}: {payload[1].value}
-          </p>
+        <div className='bg-white p-3 shadow-lg rounded-xl border border-gray-100 text-sm'>
+          <p className='font-medium text-gray-900 mb-2'>Minute {label}</p>
+          <div className='space-y-1.5'>
+            <p className='text-blue-600 flex items-center gap-2'>
+              <span className='w-2 h-2 rounded-full bg-blue-500'></span>
+              {homeTeam}: {payload[0].value}
+            </p>
+            <p className='text-red-600 flex items-center gap-2'>
+              <span className='w-2 h-2 rounded-full bg-red-500'></span>
+              {awayTeam}: {payload[1].value}
+            </p>
+          </div>
         </div>
       );
     }
@@ -138,37 +154,47 @@ const MomentumChart = ({ data, homeTeam, awayTeam }) => {
   };
 
   return (
-    <div className='w-full h-40 mt-2'>
+    <div className='w-full h-48 mt-4'>
       <ResponsiveContainer width='100%' height='100%'>
         <AreaChart
           data={data}
-          margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+          margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
         >
           <defs>
             <linearGradient id='homeGradient' x1='0' y1='0' x2='0' y2='1'>
-              <stop offset='5%' stopColor='#2563eb' stopOpacity={0.2} />
-              <stop offset='95%' stopColor='#2563eb' stopOpacity={0} />
+              <stop offset='5%' stopColor='#3b82f6' stopOpacity={0.3} />
+              <stop offset='95%' stopColor='#3b82f6' stopOpacity={0} />
             </linearGradient>
             <linearGradient id='awayGradient' x1='0' y1='0' x2='0' y2='1'>
-              <stop offset='5%' stopColor='#dc2626' stopOpacity={0.2} />
-              <stop offset='95%' stopColor='#dc2626' stopOpacity={0} />
+              <stop offset='5%' stopColor='#ef4444' stopOpacity={0.3} />
+              <stop offset='95%' stopColor='#ef4444' stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray='3 3' opacity={0.1} />
-          <XAxis dataKey='minute' tick={{ fontSize: 10 }} tickLine={false} />
-          <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+          <CartesianGrid strokeDasharray='3 3' opacity={0.15} />
+          <XAxis
+            dataKey='minute'
+            tick={{ fontSize: 12 }}
+            tickLine={false}
+            stroke='#9ca3af'
+          />
+          <YAxis
+            tick={{ fontSize: 12 }}
+            tickLine={false}
+            axisLine={false}
+            stroke='#9ca3af'
+          />
           <Tooltip content={<CustomTooltip />} />
           <Area
             type='monotone'
             dataKey='home'
-            stroke='#2563eb'
+            stroke='#3b82f6'
             strokeWidth={2}
             fill='url(#homeGradient)'
           />
           <Area
             type='monotone'
             dataKey='away'
-            stroke='#dc2626'
+            stroke='#ef4444'
             strokeWidth={2}
             fill='url(#awayGradient)'
           />
@@ -178,59 +204,234 @@ const MomentumChart = ({ data, homeTeam, awayTeam }) => {
   );
 };
 
+// Continue with Batch 2...
+
+// ... Previous Batch 1 code remains the same ...
+
+// Supporting Components
 const MarketOddsCard = ({ market, children }) => {
+  const getProbabilityColor = (probability) => {
+    const prob = parseFloat(probability);
+    if (prob >= 0.7) {
+      // 70% or higher
+      return 'bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300';
+    }
+    return 'hover:bg-gray-50 hover:border-gray-300';
+  };
+
+  const formatProbability = (probability) => {
+    return (parseFloat(probability) * 100).toFixed(1) + '%';
+  };
+
   return (
-    <div className='p-4 bg-white rounded-lg shadow-sm border border-gray-100'>
-      <div className='flex justify-between items-start mb-3'>
-        <div>
-          <h3 className='font-medium text-gray-900'>{market.oddstype}</h3>
-          <p className='text-sm text-gray-500'>{market.oddstypeshort}</p>
+    <Card className='bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300'>
+      <div className='p-5'>
+        <div className='flex justify-between items-start mb-4'>
+          <div className='space-y-1'>
+            <h3 className='font-semibold text-gray-900'>{market.desc}</h3>
+            <p className='text-sm text-gray-500'>{market.name}</p>
+          </div>
+          {market.farNearOdds !== 0 && (
+            <Badge
+              variant='secondary'
+              className={`text-xs ${
+                market.farNearOdds === 1
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'bg-red-50 text-red-600'
+              }`}
+            >
+              {market.farNearOdds === 1 ? 'Favorite' : 'Underdog'}
+            </Badge>
+          )}
         </div>
-        <div className='text-xs text-gray-400'>
-          {market.extra && `(${market.extra})`}
+
+        <div className='grid grid-cols-3 gap-3'>
+          {market.outcomes
+            .filter((outcome) => outcome.isActive === 1)
+            .map((outcome, idx) => (
+              <Button
+                key={idx}
+                variant='outline'
+                className={`flex flex-col items-center p-3 h-auto transition-all ${getProbabilityColor(
+                  outcome.probability
+                )}`}
+              >
+                <div className='text-sm text-gray-600 mb-1 text-center'>
+                  {outcome.desc}
+                </div>
+                <div className='font-bold text-gray-900'>{outcome.odds}</div>
+                <div
+                  className={`text-xs mt-1 ${
+                    parseFloat(outcome.probability) >= 0.7
+                      ? 'text-green-600 font-medium'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  {formatProbability(outcome.probability)}
+                </div>
+              </Button>
+            ))}
         </div>
+
+        {children && (
+          <div className='mt-4 pt-4 border-t border-gray-100'>{children}</div>
+        )}
       </div>
-      <div className='grid grid-cols-3 gap-2'>
-        {Object.values(market.outcomes).map((outcome, idx) => (
-          <button
-            key={idx}
-            className='p-2 bg-gray-50 rounded text-center hover:bg-gray-100 transition-colors'
-          >
-            <div className='text-sm text-gray-600 mb-1'>{outcome.name}</div>
-            <div className='font-bold text-gray-900'>{outcome.odds}</div>
-          </button>
-        ))}
-      </div>
-      {children}
+    </Card>
+  );
+};
+
+const DetailStats = ({ details }) => {
+  // Filter out period-specific stats and empty values
+  const relevantStats = Object.entries(details?.values || {}).filter(
+    ([key, value]) =>
+      !key.includes('period') &&
+      (value.value.home !== '' || value.value.away !== '')
+  );
+
+  return (
+    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+      {relevantStats.map(([key, stat]) => (
+        <div
+          key={key}
+          className='bg-white p-4 rounded-xl shadow-sm border border-gray-100'
+        >
+          <h4 className='text-sm font-medium text-gray-500 mb-2'>
+            {stat.name}
+          </h4>
+          <div className='flex justify-between items-center'>
+            <span className='text-lg font-semibold text-blue-600'>
+              {stat.value.home}
+            </span>
+            <span className='text-lg font-semibold text-red-600'>
+              {stat.value.away}
+            </span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 };
 
-const TournamentTable = ({ tournament }) => {
-  // Accessing the tables from the correct location in the tournament data
-  const tables = tournament.goals.tables;
-
-  if (
-    !tables ||
-    tables.length === 0 ||
-    !tables[0].tablerows ||
-    tables[0].tablerows.length === 0
-  ) {
-    return <div>No tournament tables available.</div>;
-  }
+const SituationTimeline = ({ situations }) => {
+  const timelineData =
+    situations?.map((situation) => ({
+      minute: situation.time,
+      homeAttacks: situation.home.attackcount,
+      homeDangerous: situation.home.dangerouscount,
+      homeSafe: situation.home.safecount,
+      awayAttacks: situation.away.attackcount,
+      awayDangerous: situation.away.dangerouscount,
+      awaySafe: situation.away.safecount,
+    })) || [];
 
   return (
-    <div className='bg-gray-50 rounded-lg p-4 mb-4'>
-      <h4 className='font-semibold mb-2'>
-        Tournament Positions: {tournament.name}
-      </h4>
-      <ul>
-        {tables[0].tablerows.map((row) => (
-          <li key={row.team._id}>
-            {row.pos}. {row.team.name}
-          </li>
-        ))}
-      </ul>
+    <div className='space-y-6'>
+      <div className='bg-white rounded-xl border p-6'>
+        <h4 className='font-semibold text-gray-900 mb-4'>
+          Match Situations Timeline
+        </h4>
+        <div className='h-[300px]'>
+          <ResponsiveContainer width='100%' height='100%'>
+            <AreaChart
+              data={timelineData}
+              margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient
+                  id='homeAttackGradient'
+                  x1='0'
+                  y1='0'
+                  x2='0'
+                  y2='1'
+                >
+                  <stop offset='5%' stopColor='#3b82f6' stopOpacity={0.3} />
+                  <stop offset='95%' stopColor='#3b82f6' stopOpacity={0} />
+                </linearGradient>
+                <linearGradient
+                  id='awayAttackGradient'
+                  x1='0'
+                  y1='0'
+                  x2='0'
+                  y2='1'
+                >
+                  <stop offset='5%' stopColor='#ef4444' stopOpacity={0.3} />
+                  <stop offset='95%' stopColor='#ef4444' stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray='3 3' opacity={0.15} />
+              <XAxis
+                dataKey='minute'
+                tick={{ fontSize: 12 }}
+                tickLine={false}
+                stroke='#9ca3af'
+              />
+              <YAxis
+                tick={{ fontSize: 12 }}
+                tickLine={false}
+                axisLine={false}
+                stroke='#9ca3af'
+              />
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (active && payload && payload.length) {
+                    return (
+                      <div className='bg-white p-3 shadow-lg rounded-xl border border-gray-100'>
+                        <p className='font-medium text-gray-900 mb-2'>
+                          Minute {label}
+                        </p>
+                        <div className='space-y-1 text-sm'>
+                          <p className='text-blue-600'>
+                            Home Attacks: {payload[0].value}
+                          </p>
+                          <p className='text-blue-800'>
+                            Home Dangerous: {payload[1].value}
+                          </p>
+                          <p className='text-red-600'>
+                            Away Attacks: {payload[2].value}
+                          </p>
+                          <p className='text-red-800'>
+                            Away Dangerous: {payload[3].value}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Area
+                type='monotone'
+                dataKey='homeAttacks'
+                stroke='#3b82f6'
+                fill='url(#homeAttackGradient)'
+                strokeWidth={2}
+              />
+              <Area
+                type='monotone'
+                dataKey='homeDangerous'
+                stroke='#1d4ed8'
+                fill='none'
+                strokeWidth={2}
+              />
+              <Area
+                type='monotone'
+                dataKey='awayAttacks'
+                stroke='#ef4444'
+                fill='url(#awayAttackGradient)'
+                strokeWidth={2}
+              />
+              <Area
+                type='monotone'
+                dataKey='awayDangerous'
+                stroke='#b91c1c'
+                fill='none'
+                strokeWidth={2}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
   );
 };
@@ -240,43 +441,67 @@ const CurrentForm = ({ team }) => {
   let wins = 0;
   let draws = 0;
   let losses = 0;
-  let totalGoals = 0; // Counter for total goals
+  let totalGoals = 0;
 
   // Count results
   if (team?.matches) {
     team.matches.forEach((match) => {
-      totalGoals += match.result.home; // Add home goals
-      if (match.result.home > match.result.away) {
-        wins++;
-      } else if (match.result.home < match.result.away) {
-        losses++;
-      } else {
-        draws++;
-      }
+      totalGoals += match.result.home;
+      if (match.result.home > match.result.away) wins++;
+      else if (match.result.home < match.result.away) losses++;
+      else draws++;
     });
   }
 
   const averageGoals = team.matches?.length
     ? (totalGoals / team.matches.length).toFixed(2)
-    : 0; // Calculate average goals
+    : 0;
+
+  const getResultClass = (result) => {
+    switch (result) {
+      case 'W':
+        return 'bg-gradient-to-br from-green-500 to-green-600';
+      case 'L':
+        return 'bg-gradient-to-br from-red-500 to-red-600';
+      default:
+        return 'bg-gradient-to-br from-gray-500 to-gray-600';
+    }
+  };
 
   return (
-    <div key={team.team._id} className='space-y-1'>
-      <div className='text-sm text-gray-600'>
-        {team.team.name} (Avg Goals: {averageGoals})
+    <Card className='p-5 space-y-4'>
+      <div className='flex items-center justify-between'>
+        <div className='space-y-1'>
+          <h4 className='font-semibold text-gray-900'>
+            {team?.team?.name || 'Unknown Team'}
+          </h4>
+          <p className='text-sm text-gray-500'>
+            Avg Goals: {averageGoals} per match
+          </p>
+        </div>
+        <div className='text-right text-sm'>
+          <div className='font-medium text-gray-900'>
+            {team.matches.length} matches
+          </div>
+          <div className='text-gray-500'>
+            {wins}W - {draws}D - {losses}L
+          </div>
+        </div>
       </div>
-      <div className='flex gap-1'>
+
+      <div className='flex flex-wrap gap-2'>
         {team.matches?.map((match) => (
           <div
             key={match._id}
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium
-            ${
-              match.result.home > match.result.away
-                ? 'bg-green-500'
-                : match.result.home < match.result.away
-                ? 'bg-red-500'
-                : 'bg-gray-500'
-            }`}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-medium shadow-sm
+              ${getResultClass(
+                match.result.home > match.result.away
+                  ? 'W'
+                  : match.result.home < match.result.away
+                  ? 'L'
+                  : 'D'
+              )}`}
+            title={`${match.result.home} - ${match.result.away}`}
           >
             {match.result.home > match.result.away
               ? 'W'
@@ -286,93 +511,76 @@ const CurrentForm = ({ team }) => {
           </div>
         ))}
       </div>
-      <div className='text-sm text-gray-600'>
-        Wins: {wins}, Draws: {draws}, Losses: {losses}
-      </div>
-      <div className='text-sm text-gray-600 flex flex-wrap'>
-        Previous Results:{' '}
-        {team.matches
-          ?.map((match) => (
-            <div key={match._id} className='mr-2'>
-              {match.result.home > match.result.away ? '(Home)' : '(Away)'}:{' '}
-              {match.result.home} - {match.result.away}
-              {match.result.awayTeamName}
+
+      <ScrollArea className='h-[200px] w-full rounded-md'>
+        <div className='space-y-2'>
+          {team.matches?.map((match) => (
+            <div
+              key={match._id}
+              className='flex items-center justify-between text-sm p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors'
+            >
+              <div className='text-gray-600'>
+                {new Date(match.time.uts * 1000).toLocaleDateString()}
+              </div>
+              <div className='font-medium text-gray-900'>
+                {match.result.home} - {match.result.away}
+              </div>
+              <div className='text-gray-600'>
+                {match.result.home > match.result.away ? '(Home)' : '(Away)'}
+              </div>
             </div>
-          ))
-          .reduce((prev, curr) => [prev, ', ', curr], [])}
-      </div>
-      <div className='text-sm text-gray-600'>
-        Average Goals:{' '}
-        {team.matches?.length
-          ? (
-              team.matches.reduce((sum, match) => sum + match.result.home, 0) /
-              team.matches.length
-            ).toFixed(2)
-          : 0}{' '}
-        per match ({team.matches.length} matches)
-      </div>
-    </div>
+          ))}
+        </div>
+      </ScrollArea>
+    </Card>
   );
 };
+
+// Continue with Batch 3...
+
+// ... Previous Batches' code remains the same ...
 
 const MatchCard = ({ event }) => {
   const [expanded, setExpanded] = useState(false);
   const { addToCart, removeFromCart, isInCart } = useCart();
 
-  const handleCartToggle = useCallback(() => {
+  const handleToggle = () => {
     if (isInCart(event.eventId)) {
       removeFromCart(event.eventId);
     } else {
       addToCart(event);
     }
-  }, [event, isInCart, removeFromCart, addToCart]);
+  };
 
-  var analysis = event.enrichedData.analysis;
-  // Data extraction from event object
-  const goalProbability = analysis?.goalProbability;
-  const recommendation = analysis?.recommendation;
+  // Data extraction and calculations
+  const analysis = event.enrichedData?.analysis;
+  const stats = analysis?.stats;
   const momentum = analysis?.momentum;
-  const stats = analysis.stats;
-  const homeTeam = event.homeTeamName;
-  const awayTeam = event.awayTeamName;
-  const matchStatus = event.matchStatus;
-  const score = event.setScore;
-  const playedTime = event.playedSeconds;
+  const situations = event.enrichedData?.situation?.data || [];
+  const details = event.enrichedData?.details;
+  const h2h = event.enrichedData?.h2h;
+  const form = event.enrichedData?.form;
+  const tournament = event.enrichedData?.tournament;
 
-  // Match situation data
-  const situations = event.enrichedData.situation?.data || [];
-  let details = event.enrichedData.details;
-  let odds = event.enrichedData.odds;
-  let h2h = event.enrichedData.h2h;
-  let form = event.enrichedData.form;
-  let tournament = event.enrichedData.tournament;
-
-  // Core metrics
-  const coreStats = {
+  // Core metrics calculations
+  const coreMetrics = {
     possession: {
+      total: (stats?.possession?.home || 0) + (stats?.possession?.away || 0),
       home: stats?.possession?.home || 0,
       away: stats?.possession?.away || 0,
     },
     attacks: {
+      total: (stats?.attacks?.home || 0) + (stats?.attacks?.away || 0),
       home: stats?.attacks?.home || 0,
       away: stats?.attacks?.away || 0,
     },
     dangerous: {
+      total: (stats?.dangerous?.home || 0) + (stats?.dangerous?.away || 0),
       home: stats?.dangerous?.home || 0,
       away: stats?.dangerous?.away || 0,
     },
-    shots: stats?.shots || {
-      onTarget: { home: 0, away: 0 },
-      offTarget: { home: 0, away: 0 },
-    },
-    corners: stats?.corners || { home: 0, away: 0 },
-    cards: stats?.cards || {
-      yellow: { home: 0, away: 0 },
-      red: { home: 0, away: 0 },
-    },
   };
 
-  // Momentum trend data for chart
   const trendData =
     momentum?.trend?.map((t) => ({
       minute: t.minute,
@@ -380,381 +588,375 @@ const MatchCard = ({ event }) => {
       away: t.awayIntensity,
     })) || [];
 
-  // Timeline events
-  const events = momentum?.timeline?.events || [];
-
-  // Available markets
-  const availableMarkets = event.markets.filter(
-    (market) => market.status === 0
-  );
-
-  // Calculate total attacks for home and away
-  const totalHomeAttacks = situations.reduce((acc, situation) => {
-    return acc + situation.home.attack;
-  }, 0);
-
-  const totalAwayAttacks = situations.reduce((acc, situation) => {
-    return acc + situation.away.attack;
-  }, 0);
-
   return (
-    <div className='w-full max-w-[1920px]'>
-      <Card className='w-full bg-white shadow-lg'>
-        <CardContent className='p-4 md:p-6 lg:p-8'>
-          {/* Header */}
-          <div className='flex justify-between items-start mb-4'>
-            <div className='text-sm font-medium text-gray-600'>
-              {event.sport.category.tournament.name}
-              {event.round ? `  Round ${event.round}` : ''}
-            </div>
-            <button
-              onClick={handleCartToggle}
-              className={`p-2.5 rounded-full transition-colors relative ${
-                isInCart(event.eventId)
-                  ? 'bg-green-50 text-green-600 hover:bg-green-100'
-                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <ShoppingCart size={18} />
-              {isInCart(event.eventId) && (
-                <div className='absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full'></div>
+    <div className='w-full max-w-[1920px] mx-auto p-4'>
+      <Card className='bg-white shadow-xl rounded-2xl overflow-hidden'>
+        {/* Header Section */}
+        <div className='p-6 bg-gradient-to-r from-gray-50 via-white to-gray-50 border-b'>
+          <div className='flex justify-between items-center mb-6'>
+            <div className='space-y-1'>
+              <h2 className='text-xl font-semibold text-gray-900'>
+                {event.sport.category.tournament.name}
+              </h2>
+              {event.round && (
+                <Badge variant='secondary' className='text-sm'>
+                  Round {event.round}
+                </Badge>
               )}
-            </button>
+            </div>
+            <Button
+              variant='outline'
+              size='icon'
+              onClick={handleToggle}
+              className={`rounded-full p-3 relative transition-all duration-300 ${
+                isInCart(event.eventId)
+                  ? 'bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-600'
+                  : 'bg-gray-50 text-gray-600 hover:bg-green-50 hover:text-green-600'
+              }`}
+              title={
+                isInCart(event.eventId) ? 'Remove from cart' : 'Add to cart'
+              }
+            >
+              <ShoppingCart
+                size={20}
+                className={`transition-transform duration-300 ${
+                  isInCart(event.eventId) ? 'scale-110' : 'scale-100'
+                }`}
+              />
+              {isInCart(event.eventId) && (
+                <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full ring-2 ring-white animate-pulse' />
+              )}
+            </Button>
           </div>
 
-          {/* Teams and Score */}
-          <div className='flex items-center justify-between mb-6'>
-            <div className='flex-1'>
-              <div className='flex flex-col items-end text-right'>
-                <h3 className='text-2xl font-bold'>{homeTeam}</h3>
-                <span className='text-sm text-gray-500'>{homeTeam}</span>
-              </div>
+          {/* Score Section */}
+          <div className='flex items-center justify-between gap-4 p-6 bg-white rounded-xl shadow-sm'>
+            <div className='flex-1 text-right space-y-2'>
+              <h3 className='text-3xl font-bold text-gray-900'>
+                {event.homeTeamName}
+              </h3>
+              <span className='text-sm text-gray-500'>Home</span>
             </div>
 
             <div className='flex flex-col items-center px-8'>
-              <div className='text-4xl font-bold tracking-tight mb-1'>
-                {score}
+              <div className='text-5xl font-bold tracking-tighter mb-2 bg-gradient-to-r from-blue-600 to-red-600 bg-clip-text text-transparent'>
+                {event.setScore}
               </div>
-              <div className='flex items-center gap-2 text-sm text-gray-500'>
-                <Clock size={14} />
-                <span>{playedTime || '0'}'</span>
+              <div className='flex items-center gap-2 px-4 py-1.5 bg-white rounded-full shadow-sm border border-gray-200'>
+                <Clock size={14} className='text-gray-500' />
+                <span className='text-sm font-medium text-gray-700'>
+                  {event.playedSeconds || '0'}'
+                </span>
               </div>
-              <div className='text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full mt-2'>
+              <div className='mt-3 px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-sm font-medium'>
                 {event.matchStatus?.name}
               </div>
             </div>
 
-            <div className='flex-1'>
-              <div className='flex flex-col items-start'>
-                <h3 className='text-2xl font-bold'>{awayTeam}</h3>
-                <span className='text-sm text-gray-500'>{awayTeam}</span>
-              </div>
+            <div className='flex-1 space-y-2'>
+              <h3 className='text-3xl font-bold text-gray-900'>
+                {event.awayTeamName}
+              </h3>
+              <span className='text-sm text-gray-500'>Away</span>
             </div>
           </div>
+        </div>
 
+        <CardContent className='p-6'>
           {/* Quick Stats Grid */}
-          <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6 bg-gray-50 p-4 rounded-lg'>
+          <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8'>
             <StatItem
               label='Shots on Target'
-              value={`${coreStats.shots.onTarget.home} - ${coreStats.shots.onTarget.away}`}
+              value={`${stats?.shots?.onTarget?.home || 0} - ${
+                stats?.shots?.onTarget?.away || 0
+              }`}
               icon={Target}
             />
             <StatItem
               label='Shots off Target'
-              value={`${coreStats.shots.offTarget.home} - ${coreStats.shots.offTarget.away}`}
+              value={`${stats?.shots?.offTarget?.home || 0} - ${
+                stats?.shots?.offTarget?.away || 0
+              }`}
               icon={Target}
             />
             <StatItem
               label='Corner Kicks'
-              value={`${coreStats.corners.home} - ${coreStats.corners.away}`}
+              value={`${stats?.corners?.home || 0} - ${
+                stats?.corners?.away || 0
+              }`}
               icon={Flag}
             />
             <StatItem
               label='Yellow Cards'
-              value={`${coreStats.cards.yellow.home} - ${coreStats.cards.yellow.away}`}
+              value={`${stats?.cards?.yellow?.home || 0} - ${
+                stats?.cards?.yellow?.away || 0
+              }`}
               icon={AlertCircle}
             />
             <StatItem
               label='Total Attacks'
-              value={`${coreStats.attacks.home} - ${coreStats.attacks.away}`}
+              value={`${coreMetrics.attacks.home} - ${coreMetrics.attacks.away}`}
               icon={Shield}
             />
             <StatItem
               label='Possession'
-              value={`${coreStats.possession.home}% - ${coreStats.possession.away}%`}
+              value={`${coreMetrics.possession.home}% - ${coreMetrics.possession.away}%`}
               icon={Circle}
             />
           </div>
 
-          {/* Main Stats Comparisons */}
-          <div className='space-y-4 mb-6'>
-            <StatComparison
-              label='Possession'
-              home={coreStats.possession.home}
-              away={coreStats.possession.away}
-              total={100}
-            />
-            <StatComparison
-              label='Total Attacks'
-              home={coreStats.attacks.home}
-              away={coreStats.attacks.away}
-              total={coreStats.attacks.home + coreStats.attacks.away || 1}
-            />
-            <StatComparison
-              label='Dangerous Attacks'
-              home={coreStats.dangerous.home}
-              away={coreStats.dangerous.away}
-              total={coreStats.dangerous.home + coreStats.dangerous.away || 1}
-            />
-          </div>
+          {/* Tabbed Content */}
+          <Tabs defaultValue='stats' className='w-full'>
+            <TabsList className='mb-6'>
+              <TabsTrigger value='stats'>Match Stats</TabsTrigger>
+              <TabsTrigger value='momentum'>Momentum</TabsTrigger>
+              <TabsTrigger value='timeline'>Timeline</TabsTrigger>
+              <TabsTrigger value='analysis'>Analysis</TabsTrigger>
+              <TabsTrigger value='details'>Details</TabsTrigger>
+              <TabsTrigger value='prediction'>Prediction</TabsTrigger>
+            </TabsList>
 
-          {/* Momentum Chart */}
-          {trendData.length > 0 && (
-            <div className='mb-6'>
-              <div className='flex items-center gap-2 mb-2'>
-                <TrendingUp size={16} className='text-gray-600' />
-                <h4 className='font-semibold'>Match Momentum</h4>
-              </div>
-              <div className='bg-gray-50 rounded-lg p-3'>
-                <div className='flex justify-between text-xs text-gray-500 mb-2'>
-                  <span className='flex items-center gap-1'>
-                    <div className='w-2 h-2 rounded-full bg-blue-500'></div>
-                    {homeTeam?.name}
-                  </span>
-                  <span className='flex items-center gap-1'>
-                    {awayTeam?.name}
-                    <div className='w-2 h-2 rounded-full bg-red-500'></div>
-                  </span>
+            <TabsContent value='details'>
+              <div className='space-y-8'>
+                <div className='space-y-4'>
+                  <div className='flex items-center gap-2'>
+                    <Activity size={20} className='text-gray-600' />
+                    <h3 className='font-semibold text-gray-900'>
+                      Match Details
+                    </h3>
+                  </div>
+                  <DetailStats details={event.enrichedData?.details} />
                 </div>
-                <MomentumChart
-                  data={trendData}
-                  homeTeam={homeTeam?.name}
-                  awayTeam={awayTeam?.name}
+
+                <div className='space-y-4'>
+                  <div className='flex items-center gap-2'>
+                    <TrendingUp size={20} className='text-gray-600' />
+                    <h3 className='font-semibold text-gray-900'>
+                      Situation Analysis
+                    </h3>
+                  </div>
+                  <SituationTimeline
+                    situations={event.enrichedData?.situation?.data}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value='prediction'>
+              <div className='space-y-8'>
+                <div className='space-y-4'>
+                  <div className='flex items-center gap-2'>
+                    <Activity size={20} className='text-gray-600' />
+                    <h3 className='font-semibold text-gray-900'>
+                      Match Prediction
+                    </h3>
+                  </div>
+                  <PredictionTab
+                    details={event.enrichedData?.details}
+                    h2h={event.enrichedData?.h2h}
+                    form={event.enrichedData?.form}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value='stats'>
+              <div className='space-y-4'>
+                <StatComparison
+                  label='Possession'
+                  home={coreMetrics.possession.home}
+                  away={coreMetrics.possession.away}
+                  total={coreMetrics.possession.total || 100}
+                />
+                <StatComparison
+                  label='Total Attacks'
+                  home={coreMetrics.attacks.home}
+                  away={coreMetrics.attacks.away}
+                  total={coreMetrics.attacks.total || 1}
+                />
+                <StatComparison
+                  label='Dangerous Attacks'
+                  home={coreMetrics.dangerous.home}
+                  away={coreMetrics.dangerous.away}
+                  total={coreMetrics.dangerous.total || 1}
                 />
               </div>
-            </div>
-          )}
+            </TabsContent>
 
-          {/* Match Timeline and Details */}
-          <div className='flex justify-between mb-6'>
-            {/* Match Timeline */}
-            <div className='bg-gray-50 rounded-lg p-4 w-1/2'>
-              <div className='flex items-center gap-2 mb-4'>
-                <Activity size={18} className='text-gray-600' />
-                <h4 className='font-semibold'>Match Timeline</h4>
-              </div>
-              <div className='max-h-[300px] overflow-y-auto mx-8'>
-                {events.map((event, index) => (
-                  <div key={index} className='px-8'>
-                    <TimelineEvent key={index} event={event} />
+            <TabsContent value='momentum'>
+              {momentum?.trend && (
+                <div className='bg-white rounded-xl border p-6'>
+                  <div className='flex items-center gap-2 mb-4'>
+                    <TrendingUp size={20} className='text-gray-600' />
+                    <h4 className='font-semibold text-gray-900'>
+                      Match Momentum
+                    </h4>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <MomentumChart
+                    data={trendData}
+                    homeTeam={event.homeTeamName}
+                    awayTeam={event.awayTeamName}
+                  />
+                </div>
+              )}
+            </TabsContent>
 
-            {/* Details Box */}
-            <div className='bg-gray-50 rounded-lg p-4 w-1/2'>
-              <h4 className='font-semibold mb-2'>Match Details</h4>
-              <div className='grid grid-cols-2 gap-4'>
-                {details?.values ? (
-                  Object.entries(details.values).map(([key, detail]) => (
-                    <div key={key} className='flex justify-between'>
-                      <span>{detail.name}</span>
-                      <span>
-                        {detail.value.home} - {detail.value.away}
-                      </span>
+            <TabsContent value='timeline'>
+              <div className='bg-white rounded-xl border p-6'>
+                <div className='flex items-center gap-2 mb-4'>
+                  <Activity size={20} className='text-gray-600' />
+                  <h4 className='font-semibold text-gray-900'>
+                    Match Timeline
+                  </h4>
+                </div>
+                <ScrollArea className='h-[400px]'>
+                  <div className='pr-4'>
+                    {momentum?.timeline?.events.map((event, index) => (
+                      <TimelineEvent key={index} event={event} />
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            </TabsContent>
+
+            <TabsContent value='analysis'>
+              <div className='grid md:grid-cols-2 gap-6'>
+                <div className='space-y-4'>
+                  <div className='grid grid-cols-2 gap-4'>
+                    <div className='bg-blue-50 rounded-xl p-4'>
+                      <div className='text-sm text-blue-600 mb-1'>
+                        Home Goal Probability
+                      </div>
+                      <div className='text-2xl font-bold text-blue-700'>
+                        {analysis?.goalProbability?.home?.toFixed(1)}%
+                      </div>
                     </div>
-                  ))
-                ) : (
-                  <div>No details available</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* New Situations Section */}
-          <div className='bg-gray-50 rounded-lg p-4 mt-4'>
-            <h4 className='font-semibold mb-2'>Match Situations</h4>
-            <div className='font-medium mb-2'>
-              Total Attacks: Home - {totalHomeAttacks}, Away -{' '}
-              {totalAwayAttacks}
-            </div>
-            <div className='space-y-2 max-h-40 overflow-y-auto'>
-              {situations.map((situation, index) => (
-                <div key={index} className='flex justify-between'>
-                  <span>Time: {situation.time}'</span>
-                  <span>Home Attack: {situation.home.attack}</span>
-                  <span>Away Attack: {situation.away.attack}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Goal Probability & Analysis */}
-          <div className='grid md:grid-cols-2 gap-6 mb-6'>
-            <div className='space-y-4'>
-              <div className='grid grid-cols-2 gap-4'>
-                <div className='bg-blue-50 rounded-lg p-4'>
-                  <div className='text-sm text-blue-600 mb-1'>
-                    Home Goal Probability
-                  </div>
-                  <div className='text-2xl font-bold text-blue-700'>
-                    {goalProbability?.home?.toFixed(1)}%
-                  </div>
-                </div>
-                <div className='bg-red-50 rounded-lg p-4'>
-                  <div className='text-sm text-red-600 mb-1'>
-                    Away Goal Probability
-                  </div>
-                  <div className='text-2xl font-bold text-red-700'>
-                    {goalProbability?.away?.toFixed(1)}%
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className='bg-gray-50 rounded-lg p-4'>
-              <h4 className='font-semibold mb-2'>Match Analysis</h4>
-              <div className='text-sm'>
-                <div className='font-medium text-gray-800'>
-                  {recommendation?.type}
-                </div>
-                <div className='text-gray-600 mt-1'>
-                  Confidence: {recommendation?.confidence}/10
-                </div>
-                <div className='mt-2 space-y-1'>
-                  {recommendation?.reasons?.map((reason, index) => (
-                    <div
-                      key={index}
-                      className='text-gray-600 flex items-start gap-2'
-                    >
-                      <span>•</span>
-                      <span>{reason}</span>
+                    <div className='bg-red-50 rounded-xl p-4'>
+                      <div className='text-sm text-red-600 mb-1'>
+                        Away Goal Probability
+                      </div>
+                      <div className='text-2xl font-bold text-red-700'>
+                        {analysis?.goalProbability?.away?.toFixed(1)}%
+                      </div>
                     </div>
-                  ))}
+                  </div>
+                </div>
+
+                <div className='bg-white rounded-xl border p-6'>
+                  <h4 className='font-semibold text-gray-900 mb-4'>
+                    Match Analysis
+                  </h4>
+                  <div className='space-y-4'>
+                    <div className='font-medium text-gray-900'>
+                      {analysis?.recommendation?.type}
+                    </div>
+                    <div className='text-sm text-gray-600'>
+                      Confidence: {analysis?.recommendation?.confidence}/10
+                    </div>
+                    <div className='space-y-2'>
+                      {analysis?.recommendation?.reasons?.map(
+                        (reason, index) => (
+                          <div
+                            key={index}
+                            className='flex items-start gap-2 text-sm text-gray-600'
+                          >
+                            <span>•</span>
+                            <span>{reason}</span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
 
           {/* Expand/Collapse Button */}
-          <button
-            className='w-full py-2 flex items-center justify-center gap-1 text-sm text-blue-600 hover:text-blue-800 transition-colors'
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? (
-              <>
-                <ChevronUp size={16} />
-                <span>Show Less</span>
-              </>
-            ) : (
-              <>
-                <ChevronDown size={16} />
-                <span>Show Additional Details</span>
-              </>
-            )}
-          </button>
+          <div className='mt-8'>
+            <Button
+              variant='ghost'
+              className='w-full'
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? (
+                <>
+                  <ChevronUp className='mr-2' />
+                  Show Less
+                </>
+              ) : (
+                <>
+                  <ChevronDown className='mr-2' />
+                  Show Additional Details
+                </>
+              )}
+            </Button>
+          </div>
 
           {/* Expanded Content */}
           {expanded && (
-            <div className='mt-6 space-y-6'>
+            <div className='mt-6 space-y-8'>
               {/* H2H Information */}
               {h2h && (
-                <div className='space-y-4'>
-                  <div className='flex items-center gap-2 mb-4'>
-                    <Users size={18} className='text-gray-600' />
-                    <h3 className='font-semibold'>Head to Head History</h3>
+                <div className='space-y-6'>
+                  <div className='flex items-center gap-2'>
+                    <Users size={20} className='text-gray-600' />
+                    <h3 className='font-semibold text-gray-900'>
+                      Head to Head History
+                    </h3>
                   </div>
-
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-                    {/* Previous Meetings */}
-                    <div className='bg-white rounded-lg border border-gray-100 p-4'>
-                      <h4 className='font-medium mb-3'>Previous Meetings</h4>
-                      <div className='space-y-2'>
-                        {/* Initialize total goals */}
-                        {(() => {
-                          let homeGoals = 0;
-                          let awayGoals = 0;
-
-                          // Calculate total goals
-                          if (h2h.matches && h2h.matches.length > 0) {
-                            h2h.matches.forEach((match) => {
-                              homeGoals += match.result.home || 0;
-                              awayGoals += match.result.away || 0;
-                            });
-                          }
-
-                          return (
-                            <>
-                              {/* Display total goals above the list */}
-                              <div className='mt-4'>
-                                <div className='font-medium'>
-                                  Total Goals: Home - {homeGoals}, Away -{' '}
-                                  {awayGoals}
-                                </div>
+                    <div className='bg-white rounded-xl border p-6'>
+                      <h4 className='font-medium text-gray-900 mb-4'>
+                        Previous Meetings
+                      </h4>
+                      <ScrollArea className='h-[300px]'>
+                        <div className='space-y-3 pr-4'>
+                          {h2h.matches?.map((match, idx) => (
+                            <div
+                              key={idx}
+                              className='flex items-center justify-between py-2 border-b border-gray-100 last:border-0'
+                            >
+                              <div className='text-sm text-gray-500'>
+                                {new Date(
+                                  match.time.uts * 1000
+                                ).toLocaleDateString()}
                               </div>
-
-                              {h2h.matches?.map((match, idx) => (
-                                <div
-                                  key={idx}
-                                  className='flex items-center justify-between text-sm'
-                                >
-                                  <div className='text-gray-500'>
-                                    {new Date(
-                                      match.time.uts * 1000
-                                    ).toLocaleDateString()}
-                                  </div>
-                                  <div className='font-medium'>
-                                    {match.result.home} - {match.result.away}
-                                  </div>
-                                </div>
-                              ))}
-                            </>
-                          );
-                        })()}
-                      </div>
+                              <div className='font-medium text-gray-900'>
+                                {match.result.home} - {match.result.away}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
                     </div>
-
-                    {/* Current Form */}
-                    <div className='bg-white rounded-lg border border-gray-100 p-4'>
-                      <h4 className='font-medium mb-3'>Current Form</h4>
-                      <div className='space-y-4'>
-                        {[form.home, form.away].map((team) => (
-                          <CurrentForm team={team} />
-                        ))}
-                      </div>
+                    <div className='space-y-6'>
+                      {[form.home, form.away].map((team, idx) => (
+                        <CurrentForm key={idx} team={team} />
+                      ))}
                     </div>
                   </div>
                 </div>
               )}
 
+              {/* Tournament Table */}
               {tournament && <TournamentTable tournament={tournament} />}
 
-              {availableMarkets.length > 0 && (
-                <div className='space-y-4'>
-                  <div className='flex items-center gap-2 mb-4'>
-                    <Ticket size={18} className='text-gray-600' />
-                    <h3 className='font-semibold'>Available Markets</h3>
+              {/* Markets Section */}
+              {event.markets.length > 0 && (
+                <div className='space-y-6'>
+                  <div className='flex items-center gap-2'>
+                    <Ticket size={20} className='text-gray-600' />
+                    <h3 className='font-semibold text-gray-900'>
+                      Available Markets
+                    </h3>
                   </div>
-                  <div className='grid md:grid-cols-2 gap-4'>
-                    {availableMarkets.map((market, index) => (
-                      <MarketOddsCard key={index} market={market}>
-                        <div className='probability'>
-                          {market.outcomes.map((outcome) => (
-                            <div
-                              key={outcome.id}
-                              className={
-                                outcome.probability > 0.7
-                                  ? 'text-green-600 font-bold'
-                                  : ''
-                              }
-                            >
-                              {outcome.desc}: {outcome.probability}
-                            </div>
-                          ))}
-                        </div>
-                      </MarketOddsCard>
-                    ))}
+                  <div className='grid md:grid-cols-2 gap-6'>
+                    {event.markets
+                      .filter((market) => market.status === 0)
+                      .map((market, index) => (
+                        <MarketOddsCard key={index} market={market} />
+                      ))}
                   </div>
                 </div>
               )}

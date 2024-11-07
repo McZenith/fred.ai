@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useCallback, useMemo, Suspense } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useCallback, useMemo, useTransition } from 'react';
+import { CartProvider, useCart } from '@/hooks/useCart';
+import { FilterProvider, useFilter } from '@/hooks/filterContext';
+import { useMatchData } from '@/hooks/useMatchData';
 import MatchCard from '@/components/MatchCard';
 import { HeaderControls } from '@/components/HeaderControls';
 import { FilterBar } from '@/components/FilterBar';
 import { Spinner } from './components/Spinner';
-import { useMatchData } from '@/hooks/useMatchData';
-import { CartProvider, useCart } from '@/hooks/useCart';
-import { FilterProvider, useFilter } from '@/hooks/filterContext';
 
 const MatchCardSkeleton = () => (
   <div className='animate-pulse bg-white rounded-xl shadow-lg p-4 space-y-4'>
@@ -33,29 +32,41 @@ const MatchCardSkeleton = () => (
   </div>
 );
 
-const MatchList = ({ matches }) => {
-  return matches.map((event, index) => (
-    <div
-      key={event.eventId}
-      className='opacity-0 animate-fadeIn'
-      style={{
-        animationDelay: `${index * 100}ms`,
-        animationFillMode: 'forwards',
-      }}
-    >
-      <MatchCard event={event} />
+const MatchList = React.memo(({ matches }) => (
+  <div className='space-y-4 transition-opacity duration-200'>
+    {matches.map((event) => (
+      <div key={event.eventId}>
+        <MatchCard event={event} />
+      </div>
+    ))}
+  </div>
+));
+
+MatchList.displayName = 'MatchList';
+
+const LoadingOverlay = ({ show }) =>
+  show ? (
+    <div className='fixed bottom-4 right-4 bg-white rounded-full shadow-lg p-2 transition-opacity duration-200'>
+      <Spinner className='w-6 h-6 text-blue-500' />
     </div>
-  ));
-};
+  ) : null;
+
+const ErrorMessage = ({ error }) =>
+  error ? (
+    <div className='bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 transition-opacity duration-200'>
+      <span className='block sm:inline'>
+        Error loading matches: {error.message}
+      </span>
+    </div>
+  ) : null;
 
 const HomeContent = () => {
   const [activeTab, setActiveTab] = useState('live');
   const [copyMessage, setCopyMessage] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   const { isInCart, showCartOnly } = useCart();
   const { applyFilters } = useFilter();
-
   const {
     liveData,
     upcomingData,
@@ -68,30 +79,27 @@ const HomeContent = () => {
 
   const handleTabChange = useCallback(
     (tab) => {
-      setActiveTab(tab);
-      if (tab === 'live') {
-        refreshLiveData();
-      } else {
-        refreshUpcomingData();
-      }
+      startTransition(() => {
+        setActiveTab(tab);
+        if (tab === 'live') {
+          refreshLiveData();
+        } else {
+          refreshUpcomingData();
+        }
+      });
     },
     [refreshLiveData, refreshUpcomingData]
   );
 
   const filteredData = useMemo(() => {
-    setIsProcessing(true);
     const sourceData = activeTab === 'live' ? liveData : upcomingData;
-
-    // First apply cart filter if showCartOnly is true
     let filtered = sourceData;
+
     if (showCartOnly) {
       filtered = filtered.filter((event) => isInCart(event.eventId));
     }
 
-    // Then apply other filters
-    const result = applyFilters(filtered, isInCart);
-    setIsProcessing(false);
-    return result;
+    return applyFilters(filtered, isInCart);
   }, [activeTab, liveData, upcomingData, applyFilters, isInCart, showCartOnly]);
 
   const copyHomeTeams = useCallback(() => {
@@ -117,13 +125,9 @@ const HomeContent = () => {
       });
   }, [filteredData]);
 
-  const totalMatches = filteredData?.length || 0;
-
-  // Only show skeleton loading for initial fetch
-  const showSkeletonLoader = isInitialFetch;
-
-  // Show spinner for real-time updates
-  const showSpinner = !isInitialFetch && isLoading && isProcessing;
+  const showSkeletons = isInitialFetch || isPending;
+  const showNoMatches = !showSkeletons && filteredData.length === 0;
+  const showMatchList = !showSkeletons && filteredData.length > 0;
 
   return (
     <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen'>
@@ -132,17 +136,11 @@ const HomeContent = () => {
           ⚽ Fred.ai
         </h1>
 
-        {error && (
-          <div className='bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4'>
-            <span className='block sm:inline'>
-              Error loading matches: {error.message}
-            </span>
-          </div>
-        )}
+        <ErrorMessage error={error} />
 
         <HeaderControls
           activeTab={activeTab}
-          totalMatches={totalMatches}
+          totalMatches={filteredData?.length || 0}
           onTabChange={handleTabChange}
           onCopyHomeTeams={copyHomeTeams}
           copyMessage={copyMessage}
@@ -150,43 +148,38 @@ const HomeContent = () => {
 
         <FilterBar />
 
-        <div className='space-y-4 mt-4 relative'>
-          {/* Spinner for real-time updates */}
-          {showSpinner && (
-            <div className='absolute top-0 right-0 mt-4 mr-4'>
-              <Spinner className='w-6 h-6 text-blue-500' />
-            </div>
-          )}
-
-          {showSkeletonLoader ? (
+        <div className='mt-4'>
+          {showSkeletons && (
             <div className='space-y-4'>
               {[...Array(3)].map((_, i) => (
                 <MatchCardSkeleton key={i} />
               ))}
             </div>
-          ) : filteredData.length === 0 ? (
+          )}
+
+          {showNoMatches && (
             <div className='text-center py-8 text-gray-500'>
               {showCartOnly
                 ? 'No matches in cart'
                 : 'No matches found for the selected filters'}
             </div>
-          ) : (
-            <MatchList matches={filteredData} />
           )}
+
+          {showMatchList && <MatchList matches={filteredData} />}
+
+          <LoadingOverlay show={isLoading && !isInitialFetch} />
         </div>
       </div>
     </div>
   );
 };
 
-const Home = () => {
-  return (
-    <CartProvider>
-      <FilterProvider>
-        <HomeContent />
-      </FilterProvider>
-    </CartProvider>
-  );
-};
+const Home = () => (
+  <CartProvider>
+    <FilterProvider>
+      <HomeContent />
+    </FilterProvider>
+  </CartProvider>
+);
 
 export default Home;
