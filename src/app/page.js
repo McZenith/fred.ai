@@ -123,7 +123,7 @@ const HomeContent = () => {
   const showSkeletonLoader = isInitialFetch;
 
   // Show spinner for real-time updates
-  const showSpinner = !isInitialFetch && isLoading;
+  const showSpinner = !isInitialFetch && isLoading && isProcessing;
 
   return (
     <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen'>

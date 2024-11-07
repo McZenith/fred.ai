@@ -206,6 +206,115 @@ const MarketOddsCard = ({ market, children }) => {
   );
 };
 
+const TournamentTable = ({ tournament }) => {
+  // Accessing the tables from the correct location in the tournament data
+  const tables = tournament.goals.tables;
+
+  if (
+    !tables ||
+    tables.length === 0 ||
+    !tables[0].tablerows ||
+    tables[0].tablerows.length === 0
+  ) {
+    return <div>No tournament tables available.</div>;
+  }
+
+  return (
+    <div className='bg-gray-50 rounded-lg p-4 mb-4'>
+      <h4 className='font-semibold mb-2'>
+        Tournament Positions: {tournament.name}
+      </h4>
+      <ul>
+        {tables[0].tablerows.map((row) => (
+          <li key={row.team._id}>
+            {row.pos}. {row.team.name}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+const CurrentForm = ({ team }) => {
+  // Initialize counters
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+  let totalGoals = 0; // Counter for total goals
+
+  // Count results
+  if (team?.matches) {
+    team.matches.forEach((match) => {
+      totalGoals += match.result.home; // Add home goals
+      if (match.result.home > match.result.away) {
+        wins++;
+      } else if (match.result.home < match.result.away) {
+        losses++;
+      } else {
+        draws++;
+      }
+    });
+  }
+
+  const averageGoals = team.matches?.length
+    ? (totalGoals / team.matches.length).toFixed(2)
+    : 0; // Calculate average goals
+
+  return (
+    <div key={team.team._id} className='space-y-1'>
+      <div className='text-sm text-gray-600'>
+        {team.team.name} (Avg Goals: {averageGoals})
+      </div>
+      <div className='flex gap-1'>
+        {team.matches?.map((match) => (
+          <div
+            key={match._id}
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium
+            ${
+              match.result.home > match.result.away
+                ? 'bg-green-500'
+                : match.result.home < match.result.away
+                ? 'bg-red-500'
+                : 'bg-gray-500'
+            }`}
+          >
+            {match.result.home > match.result.away
+              ? 'W'
+              : match.result.home < match.result.away
+              ? 'L'
+              : 'D'}
+          </div>
+        ))}
+      </div>
+      <div className='text-sm text-gray-600'>
+        Wins: {wins}, Draws: {draws}, Losses: {losses}
+      </div>
+      <div className='text-sm text-gray-600 flex flex-wrap'>
+        Previous Results:{' '}
+        {team.matches
+          ?.map((match) => (
+            <div key={match._id} className='mr-2'>
+              {match.result.home > match.result.away ? '(Home)' : '(Away)'}:{' '}
+              {match.result.home} - {match.result.away}
+              {match.result.awayTeamName}
+            </div>
+          ))
+          .reduce((prev, curr) => [prev, ', ', curr], [])}
+      </div>
+      <div className='text-sm text-gray-600'>
+        Average Goals:{' '}
+        {team.matches?.length
+          ? (
+              team.matches.reduce((sum, match) => sum + match.result.home, 0) /
+              team.matches.length
+            ).toFixed(2)
+          : 0}{' '}
+        per match ({team.matches.length} matches)
+      </div>
+    </div>
+  );
+};
+
 const MatchCard = ({ event }) => {
   const [expanded, setExpanded] = useState(false);
   const { addToCart, removeFromCart, isInCart } = useCart();
@@ -236,6 +345,7 @@ const MatchCard = ({ event }) => {
   let odds = event.enrichedData.odds;
   let h2h = event.enrichedData.h2h;
   let form = event.enrichedData.form;
+  let tournament = event.enrichedData.tournament;
 
   // Core metrics
   const coreStats = {
@@ -445,7 +555,7 @@ const MatchCard = ({ event }) => {
             {/* Details Box */}
             <div className='bg-gray-50 rounded-lg p-4 w-1/2'>
               <h4 className='font-semibold mb-2'>Match Details</h4>
-              <div className='space-y-2'>
+              <div className='grid grid-cols-2 gap-4'>
                 {details?.values ? (
                   Object.entries(details.values).map(([key, detail]) => (
                     <div key={key} className='flex justify-between'>
@@ -469,7 +579,7 @@ const MatchCard = ({ event }) => {
               Total Attacks: Home - {totalHomeAttacks}, Away -{' '}
               {totalAwayAttacks}
             </div>
-            <div className='space-y-2'>
+            <div className='space-y-2 max-h-40 overflow-y-auto'>
               {situations.map((situation, index) => (
                 <div key={index} className='flex justify-between'>
                   <span>Time: {situation.time}'</span>
@@ -609,60 +719,16 @@ const MatchCard = ({ event }) => {
                     <div className='bg-white rounded-lg border border-gray-100 p-4'>
                       <h4 className='font-medium mb-3'>Current Form</h4>
                       <div className='space-y-4'>
-                        {[form.home, form.away].map((team) => {
-                          // Initialize counters
-                          let wins = 0;
-                          let draws = 0;
-                          let losses = 0;
-
-                          // Count results
-                          team?.matches?.forEach((match) => {
-                            if (match.result.home > match.result.away) {
-                              wins++;
-                            } else if (match.result.home < match.result.away) {
-                              losses++;
-                            } else {
-                              draws++;
-                            }
-                          });
-
-                          return (
-                            <div key={team.team._id} className='space-y-1'>
-                              <div className='text-sm text-gray-600'>
-                                {team.team.name}
-                              </div>
-                              <div className='flex gap-1'>
-                                {team.matches.map((match) => (
-                                  <div
-                                    key={match._id}
-                                    className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium
-                                    ${
-                                      match.result.home > match.result.away
-                                        ? 'bg-green-500'
-                                        : match.result.home < match.result.away
-                                        ? 'bg-red-500'
-                                        : 'bg-gray-500'
-                                    }`}
-                                  >
-                                    {match.result.home > match.result.away
-                                      ? 'W'
-                                      : match.result.home < match.result.away
-                                      ? 'L'
-                                      : 'D'}
-                                  </div>
-                                ))}
-                              </div>
-                              <div className='text-sm text-gray-600'>
-                                Wins: {wins}, Draws: {draws}, Losses: {losses}
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {[form.home, form.away].map((team) => (
+                          <CurrentForm team={team} />
+                        ))}
                       </div>
                     </div>
                   </div>
                 </div>
               )}
+
+              {tournament && <TournamentTable tournament={tournament} />}
 
               {availableMarkets.length > 0 && (
                 <div className='space-y-4'>
