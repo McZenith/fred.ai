@@ -1,14 +1,29 @@
 import { FaSearch, FaTimes } from 'react-icons/fa';
-import { filterOptions } from '@/utils/constants';
+import { useFilter } from '@/hooks/filterContext';
 
-export const FilterBar = ({
-  searchTerm,
-  setSearchTerm,
-  activeFilters,
-  toggleFilter,
-  removeFilter,
-  clearFilters,
-}) => {
+export const filterOptions = [
+  { value: 'desc', label: 'Latest First', isDefault: true },
+  { value: 'asc', label: 'Oldest First' },
+  { value: 'firstHalf', label: '1st Half' },
+  { value: 'secondHalf', label: '2nd Half' },
+  { value: 'halftime', label: 'Half Time' },
+  { value: 'highProbability', label: 'High Probability' },
+  { value: 'inCart', label: 'In Cart' },
+  { value: 'over1.5', label: 'Over 1.5' },
+  { value: 'over2.5', label: 'Over 2.5' },
+  { value: 'over3.5', label: 'Over 3.5' },
+];
+
+export const FilterBar = () => {
+  const {
+    searchTerm,
+    setSearchTerm,
+    activeFilters,
+    toggleFilter,
+    removeFilter,
+    clearFilters,
+  } = useFilter();
+
   const getFilterStyle = (option) => {
     if (activeFilters.includes(option.value)) {
       return 'bg-blue-600 text-white';
@@ -77,12 +92,14 @@ export const FilterBar = ({
                 </span>
               );
             })}
-            <button
-              onClick={clearFilters}
-              className='text-sm text-red-600 hover:text-red-800'
-            >
-              Clear All
-            </button>
+            {activeFilters.length > 1 && (
+              <button
+                onClick={clearFilters}
+                className='text-sm text-red-600 hover:text-red-800'
+              >
+                Clear All
+              </button>
+            )}
           </div>
         )}
       </div>

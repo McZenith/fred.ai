@@ -1,16 +1,15 @@
 import { FaClipboard, FaShoppingCart, FaTrash } from 'react-icons/fa';
+import { useCart } from '@/hooks/useCart';
 
 export const HeaderControls = ({
   activeTab,
   totalMatches,
   onTabChange,
-  cart,
-  showCartOnly,
-  setShowCartOnly,
-  clearCart,
   onCopyHomeTeams,
   copyMessage,
 }) => {
+  const { cart, showCartOnly, setShowCartOnly, clearCart } = useCart();
+
   return (
     <>
       <div className='mb-4 flex items-center justify-between flex-wrap gap-4'>
@@ -56,7 +55,7 @@ export const HeaderControls = ({
 
         <div className='flex items-center gap-4'>
           <button
-            className={`py-2 px-4 rounded-lg font-semibold transition-colors duration-300 flex items-center ${
+            className={`py-2 px-4 rounded-lg font-semibold transition-colors duration-300 flex items-center relative ${
               showCartOnly
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-gray-700 hover:bg-blue-100'
@@ -64,7 +63,12 @@ export const HeaderControls = ({
             onClick={() => setShowCartOnly(!showCartOnly)}
           >
             <FaShoppingCart className='mr-2' />
-            Cart ({cart.length})
+            Cart
+            {cart.length > 0 && (
+              <span className='absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold py-1 px-2 rounded-full'>
+                {cart.length}
+              </span>
+            )}
           </button>
           {cart.length > 0 && (
             <button

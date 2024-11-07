@@ -1,19 +1,60 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import MatchCard from '@/components/MatchCard';
 import { HeaderControls } from '@/components/HeaderControls';
 import { FilterBar } from '@/components/FilterBar';
 import { Spinner } from './components/Spinner';
 import { useMatchData } from '@/hooks/useMatchData';
-import { isHighProbabilityMatch } from '@/utils/matchHelpers';
-import { useCart } from '@/hooks/useCart';
+import { CartProvider, useCart } from '@/hooks/useCart';
+import { FilterProvider, useFilter } from '@/hooks/filterContext';
 
-const Home = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilters, setActiveFilters] = useState(['desc']);
+const MatchCardSkeleton = () => (
+  <div className='animate-pulse bg-white rounded-xl shadow-lg p-4 space-y-4'>
+    <div className='flex justify-between'>
+      <div className='h-4 bg-gray-200 rounded w-1/3'></div>
+      <div className='h-4 bg-gray-200 rounded w-8'></div>
+    </div>
+    <div className='flex justify-between items-center'>
+      <div className='w-1/3 space-y-2'>
+        <div className='h-6 bg-gray-200 rounded'></div>
+        <div className='h-4 bg-gray-200 rounded w-2/3'></div>
+      </div>
+      <div className='space-y-2'>
+        <div className='h-8 bg-gray-200 rounded w-16'></div>
+        <div className='h-4 bg-gray-200 rounded w-12 mx-auto'></div>
+      </div>
+      <div className='w-1/3 space-y-2'>
+        <div className='h-6 bg-gray-200 rounded'></div>
+        <div className='h-4 bg-gray-200 rounded w-2/3 ml-auto'></div>
+      </div>
+    </div>
+  </div>
+);
+
+const MatchList = ({ matches }) => {
+  return matches.map((event, index) => (
+    <div
+      key={event.eventId}
+      className='opacity-0 animate-fadeIn'
+      style={{
+        animationDelay: `${index * 100}ms`,
+        animationFillMode: 'forwards',
+      }}
+    >
+      <MatchCard event={event} />
+    </div>
+  ));
+};
+
+const HomeContent = () => {
   const [activeTab, setActiveTab] = useState('live');
   const [copyMessage, setCopyMessage] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const { isInCart, showCartOnly } = useCart();
+  const { applyFilters } = useFilter();
 
   const {
     liveData,
@@ -24,16 +65,6 @@ const Home = () => {
     refreshLiveData,
     refreshUpcomingData,
   } = useMatchData();
-
-  const {
-    cart,
-    showCartOnly,
-    setShowCartOnly,
-    clearCart,
-    addToCart,
-    removeFromCart,
-    isInCart,
-  } = useCart();
 
   const handleTabChange = useCallback(
     (tab) => {
@@ -47,12 +78,24 @@ const Home = () => {
     [refreshLiveData, refreshUpcomingData]
   );
 
+  const filteredData = useMemo(() => {
+    setIsProcessing(true);
+    const sourceData = activeTab === 'live' ? liveData : upcomingData;
+
+    // First apply cart filter if showCartOnly is true
+    let filtered = sourceData;
+    if (showCartOnly) {
+      filtered = filtered.filter((event) => isInCart(event.eventId));
+    }
+
+    // Then apply other filters
+    const result = applyFilters(filtered, isInCart);
+    setIsProcessing(false);
+    return result;
+  }, [activeTab, liveData, upcomingData, applyFilters, isInCart, showCartOnly]);
+
   const copyHomeTeams = useCallback(() => {
-    const dataToCopy = (
-      activeTab === 'live'
-        ? filterAndSortData(liveData)
-        : filterAndSortData(upcomingData)
-    )
+    const dataToCopy = filteredData
       ?.map((event) => event.homeTeamName)
       .join('\n');
 
@@ -72,73 +115,15 @@ const Home = () => {
         setCopyMessage('Failed to copy.');
         setTimeout(() => setCopyMessage(''), 3000);
       });
-  }, [activeTab, liveData, upcomingData]);
-
-  const filterAndSortData = useCallback(
-    (data) => {
-      if (!data?.length) return [];
-
-      let filteredData = data.filter((event) => {
-        const teamNames = [
-          event.homeTeamName?.toLowerCase(),
-          event.awayTeamName?.toLowerCase(),
-          event.enrichedData?.matchInfo?.homeTeam?.name?.toLowerCase(),
-          event.enrichedData?.matchInfo?.awayTeam?.name?.toLowerCase(),
-          event.tournamentName?.toLowerCase(),
-        ].filter(Boolean);
-
-        return teamNames.some((name) =>
-          name.includes(searchTerm.toLowerCase())
-        );
-      });
-
-      if (showCartOnly) {
-        filteredData = filteredData.filter((event) => isInCart(event.eventId));
-      }
-
-      // Handle filters
-      filteredData = filteredData.filter((event) => {
-        return activeFilters.every((filter) => {
-          switch (filter) {
-            case 'desc':
-            case 'asc':
-              return true;
-            case 'highProbability':
-              return isHighProbabilityMatch(event);
-            case 'hasOdds':
-              return event.enrichedData?.odds?.markets?.length > 0;
-            case 'inCart':
-              return isInCart(event.eventId);
-            default:
-              return true;
-          }
-        });
-      });
-
-      // Sort data
-      if (activeFilters.includes('asc') || activeFilters.includes('desc')) {
-        const sortDirection = activeFilters.includes('asc') ? 'asc' : 'desc';
-        filteredData.sort((a, b) => {
-          const timeA = new Date(a.estimateStartTime || 0).getTime();
-          const timeB = new Date(b.estimateStartTime || 0).getTime();
-          return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
-        });
-      }
-
-      return filteredData;
-    },
-    [searchTerm, showCartOnly, isInCart, activeFilters]
-  );
-
-  const filteredData = useMemo(
-    () =>
-      activeTab === 'live'
-        ? filterAndSortData(liveData)
-        : filterAndSortData(upcomingData),
-    [activeTab, filterAndSortData, liveData, upcomingData]
-  );
+  }, [filteredData]);
 
   const totalMatches = filteredData?.length || 0;
+
+  // Only show skeleton loading for initial fetch
+  const showSkeletonLoader = isInitialFetch;
+
+  // Show spinner for real-time updates
+  const showSpinner = !isInitialFetch && isLoading;
 
   return (
     <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen'>
@@ -159,50 +144,48 @@ const Home = () => {
           activeTab={activeTab}
           totalMatches={totalMatches}
           onTabChange={handleTabChange}
-          cart={cart}
-          showCartOnly={showCartOnly}
-          setShowCartOnly={setShowCartOnly}
-          clearCart={clearCart}
           onCopyHomeTeams={copyHomeTeams}
           copyMessage={copyMessage}
         />
 
-        <FilterBar
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          activeFilters={activeFilters}
-          toggleFilter={(filter) => {
-            setActiveFilters((prev) =>
-              prev.includes(filter)
-                ? prev.filter((f) => f !== filter)
-                : [...prev, filter]
-            );
-          }}
-          removeFilter={(filter) => {
-            setActiveFilters((prev) => prev.filter((f) => f !== filter));
-          }}
-          clearFilters={() => setActiveFilters(['desc'])}
-        />
+        <FilterBar />
 
-        <div className='space-y-4 mt-4'>
-          {isLoading && isInitialFetch ? (
-            <div className='flex justify-center items-center mt-12'>
-              <Spinner className='w-12 h-12 text-blue-500' />
+        <div className='space-y-4 mt-4 relative'>
+          {/* Spinner for real-time updates */}
+          {showSpinner && (
+            <div className='absolute top-0 right-0 mt-4 mr-4'>
+              <Spinner className='w-6 h-6 text-blue-500' />
+            </div>
+          )}
+
+          {showSkeletonLoader ? (
+            <div className='space-y-4'>
+              {[...Array(3)].map((_, i) => (
+                <MatchCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : filteredData.length === 0 ? (
+            <div className='text-center py-8 text-gray-500'>
+              {showCartOnly
+                ? 'No matches in cart'
+                : 'No matches found for the selected filters'}
             </div>
           ) : (
-            filteredData?.map((event) => (
-              <MatchCard
-                key={event.eventId}
-                event={event}
-                onAddToCart={() => addToCart(event)}
-                onRemoveFromCart={() => removeFromCart(event.eventId)}
-                isInCart={isInCart(event.eventId)}
-              />
-            ))
+            <MatchList matches={filteredData} />
           )}
         </div>
       </div>
     </div>
+  );
+};
+
+const Home = () => {
+  return (
+    <CartProvider>
+      <FilterProvider>
+        <HomeContent />
+      </FilterProvider>
+    </CartProvider>
   );
 };
 

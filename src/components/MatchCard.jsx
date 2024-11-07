@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/Card';
 import {
   ChevronDown,
@@ -210,6 +210,14 @@ const MatchCard = ({ event }) => {
   const [expanded, setExpanded] = useState(false);
   const { addToCart, removeFromCart, isInCart } = useCart();
 
+  const handleCartToggle = useCallback(() => {
+    if (isInCart(event.eventId)) {
+      removeFromCart(event.eventId);
+    } else {
+      addToCart(event);
+    }
+  }, [event, isInCart, removeFromCart, addToCart]);
+
   var analysis = event.enrichedData.analysis;
   // Data extraction from event object
   const goalProbability = analysis?.goalProbability;
@@ -270,19 +278,14 @@ const MatchCard = ({ event }) => {
     (market) => market.status === 0
   );
 
-  const handleCartToggle = () => {
-    if (isInCart(event.eventId)) {
-      removeFromCart(event.eventId);
-    } else {
-      addToCart({
-        eventId: event.eventId,
-        homeTeamName: homeTeam,
-        awayTeamName: awayTeam,
-        tournament: event.sport.category.tournament.name,
-        startTime: event.estimateStartTime,
-      });
-    }
-  };
+  // Calculate total attacks for home and away
+  const totalHomeAttacks = situations.reduce((acc, situation) => {
+    return acc + situation.home.attack;
+  }, 0);
+
+  const totalAwayAttacks = situations.reduce((acc, situation) => {
+    return acc + situation.away.attack;
+  }, 0);
 
   return (
     <div className='w-full max-w-[1920px]'>
@@ -292,17 +295,20 @@ const MatchCard = ({ event }) => {
           <div className='flex justify-between items-start mb-4'>
             <div className='text-sm font-medium text-gray-600'>
               {event.sport.category.tournament.name}
-              {event.round ? ` • Round ${event.round}` : ''}
+              {event.round ? `  Round ${event.round}` : ''}
             </div>
             <button
               onClick={handleCartToggle}
-              className={`p-2.5 rounded-full transition-colors ${
+              className={`p-2.5 rounded-full transition-colors relative ${
                 isInCart(event.eventId)
                   ? 'bg-green-50 text-green-600 hover:bg-green-100'
                   : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
               }`}
             >
               <ShoppingCart size={18} />
+              {isInCart(event.eventId) && (
+                <div className='absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full'></div>
+              )}
             </button>
           </div>
 
@@ -419,16 +425,56 @@ const MatchCard = ({ event }) => {
             </div>
           )}
 
-          {/* Match Timeline */}
-          <div className='bg-gray-50 rounded-lg p-4 mb-6'>
-            <div className='flex items-center gap-2 mb-4'>
-              <Activity size={18} className='text-gray-600' />
-              <h4 className='font-semibold'>Match Timeline</h4>
+          {/* Match Timeline and Details */}
+          <div className='flex justify-between mb-6'>
+            {/* Match Timeline */}
+            <div className='bg-gray-50 rounded-lg p-4 w-1/2'>
+              <div className='flex items-center gap-2 mb-4'>
+                <Activity size={18} className='text-gray-600' />
+                <h4 className='font-semibold'>Match Timeline</h4>
+              </div>
+              <div className='max-h-[300px] overflow-y-auto mx-8'>
+                {events.map((event, index) => (
+                  <div key={index} className='px-8'>
+                    <TimelineEvent key={index} event={event} />
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className='max-h-[300px] overflow-y-auto mx-8'>
-              {events.map((event, index) => (
-                <div key={index} className='px-8'>
-                  <TimelineEvent key={index} event={event} />
+
+            {/* Details Box */}
+            <div className='bg-gray-50 rounded-lg p-4 w-1/2'>
+              <h4 className='font-semibold mb-2'>Match Details</h4>
+              <div className='space-y-2'>
+                {details?.values ? (
+                  Object.entries(details.values).map(([key, detail]) => (
+                    <div key={key} className='flex justify-between'>
+                      <span>{detail.name}</span>
+                      <span>
+                        {detail.value.home} - {detail.value.away}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div>No details available</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* New Situations Section */}
+          <div className='bg-gray-50 rounded-lg p-4 mt-4'>
+            <h4 className='font-semibold mb-2'>Match Situations</h4>
+            <div className='font-medium mb-2'>
+              Total Attacks: Home - {totalHomeAttacks}, Away -{' '}
+              {totalAwayAttacks}
+            </div>
+            <div className='space-y-2'>
+              {situations.map((situation, index) => (
+                <div key={index} className='flex justify-between'>
+                  <span>Time: {situation.time}'</span>
+                  <span>Home Attack: {situation.home.attack}</span>
+                  <span>Away Attack: {situation.away.attack}</span>
                 </div>
               ))}
             </div>
@@ -510,7 +556,7 @@ const MatchCard = ({ event }) => {
                     <h3 className='font-semibold'>Head to Head History</h3>
                   </div>
 
-                  <div className='grid md:grid-cols-2 gap-6'>
+                  <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                     {/* Previous Meetings */}
                     <div className='bg-white rounded-lg border border-gray-100 p-4'>
                       <h4 className='font-medium mb-3'>Previous Meetings</h4>
@@ -557,11 +603,9 @@ const MatchCard = ({ event }) => {
                           );
                         })()}
                       </div>
-                    </div>;
+                    </div>
 
-                    {
-                      /* Current Form */
-                    }
+                    {/* Current Form */}
                     <div className='bg-white rounded-lg border border-gray-100 p-4'>
                       <h4 className='font-medium mb-3'>Current Form</h4>
                       <div className='space-y-4'>
@@ -572,7 +616,7 @@ const MatchCard = ({ event }) => {
                           let losses = 0;
 
                           // Count results
-                          team.matches.forEach((match) => {
+                          team?.matches?.forEach((match) => {
                             if (match.result.home > match.result.away) {
                               wins++;
                             } else if (match.result.home < match.result.away) {
@@ -615,7 +659,7 @@ const MatchCard = ({ event }) => {
                           );
                         })}
                       </div>
-                    </div>;
+                    </div>
                   </div>
                 </div>
               )}

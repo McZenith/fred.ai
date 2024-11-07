@@ -1,34 +1,56 @@
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 
-export const useCart = () => {
+const CartContext = createContext();
+
+export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([]);
   const [showCartOnly, setShowCartOnly] = useState(false);
 
   const addToCart = (event) => {
-    if (!cart.some((item) => item.eventId === event.eventId)) {
-      setCart([...cart, event]);
-    }
+    setCart((prev) => [
+      ...prev,
+      {
+        eventId: event.eventId,
+        homeTeamName: event.homeTeamName,
+        awayTeamName: event.awayTeamName,
+        matchTime: event.estimateStartTime,
+        tournament: event.sport?.category?.tournament?.name,
+      },
+    ]);
   };
 
   const removeFromCart = (eventId) => {
-    setCart(cart.filter((item) => item.eventId !== eventId));
+    setCart((prev) => prev.filter((item) => item.eventId !== eventId));
   };
 
   const clearCart = () => {
     setCart([]);
+    setShowCartOnly(false);
   };
 
-  const isInCart = (eventId) => {
-    return cart.some((item) => item.eventId === eventId);
-  };
+  const isInCart = (eventId) => cart.some((item) => item.eventId === eventId);
 
-  return {
-    cart,
-    showCartOnly,
-    setShowCartOnly,
-    addToCart,
-    removeFromCart,
-    clearCart,
-    isInCart,
-  };
+  return (
+    <CartContext.Provider
+      value={{
+        cart,
+        showCartOnly,
+        setShowCartOnly,
+        addToCart,
+        removeFromCart,
+        clearCart,
+        isInCart,
+      }}
+    >
+      {children}
+    </CartContext.Provider>
+  );
+};
+
+export const useCart = () => {
+  const context = useContext(CartContext);
+  if (!context) {
+    throw new Error('useCart must be used within a CartProvider');
+  }
+  return context;
 };
