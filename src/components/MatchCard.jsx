@@ -556,8 +556,6 @@ const MatchCard = ({ event }) => {
   const analysis = event.enrichedData?.analysis;
   const stats = analysis?.stats;
   const momentum = analysis?.momentum;
-  const situations = event.enrichedData?.situation?.data || [];
-  const details = event.enrichedData?.details;
   const h2h = event.enrichedData?.h2h;
   const form = event.enrichedData?.form;
   const tournament = event.enrichedData?.tournament;
@@ -755,6 +753,7 @@ const MatchCard = ({ event }) => {
                     details={event.enrichedData?.details}
                     h2h={event.enrichedData?.h2h}
                     form={event.enrichedData?.form}
+                    currentScore={event.setScore}
                   />
                 </div>
               </div>
