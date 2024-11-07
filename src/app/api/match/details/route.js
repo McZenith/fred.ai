@@ -59,7 +59,6 @@ export const GET = async (request) => {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'private, max-age=30', // Cache for 30 seconds
         ETag: `"${matchId}-${timestamp}"`,
       },
     });

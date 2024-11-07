@@ -79,25 +79,16 @@ export const getMatchHalf = (event) => {
 };
 
 export const isHighProbabilityMatch = (event) => {
-  // Check if current goals are over 1
-  const currentGoals = event.setScore
-    ?.split(':')
-    .reduce((a, b) => parseInt(a) + parseInt(b), 0) || 0;
-  const isOverOneGoal = currentGoals > 1;
-
-  // Check if it's first half
-  const isFirstHalf = event.matchStatus === 'H1';
-
-  // Check Over 1.5 market probability
-  const over1_5Market = event.markets?.find(
-    m => m.desc === 'Over/Under' && m.specifier === 'total=1.5'
+  const mainMarket = event.markets.find(
+    (m) => m.id === '1' && m.desc === '1X2'
   );
-  const over1_5Probability = over1_5Market?.outcomes?.[0]?.probability
-    ? parseFloat(over1_5Market.outcomes[0].probability) * 100
-    : 0;
-  const isHighOver1_5Probability = over1_5Probability > 70;
+  if (!mainMarket) return false;
 
-  return isOverOneGoal && isFirstHalf && isHighOver1_5Probability;
+  const highestProb = Math.max(
+    ...mainMarket.outcomes.map((o) => parseFloat(o.probability))
+  );
+
+  return highestProb > 0.6; // 60% probability threshold
 };
 
 export const getOver1_5Market = (event) => {
@@ -147,4 +138,55 @@ export const debug = {
       console.groupEnd();
     }
   },
+};
+
+// Helper function to process match data
+export const processMatchData = (event) => {
+  const {
+    eventId,
+    homeTeamName,
+    awayTeamName,
+    estimateStartTime,
+    status,
+    playedSeconds,
+    matchStatus,
+    gameScore,
+    markets,
+    sport
+  } = event;
+
+  // Get the main 1X2 market
+  const mainMarket = markets.find(m => m.id === '1' && m.desc === '1X2');
+  
+  // Get Over/Under markets
+  const overUnderMarkets = markets.filter(m => 
+    m.id === '18' && 
+    m.desc === 'Over/Under'
+  ).sort((a, b) => {
+    const totalA = parseFloat(a.specifier.split('=')[1]);
+    const totalB = parseFloat(b.specifier.split('=')[1]);
+    return totalA - totalB;
+  });
+
+  return {
+    id: eventId,
+    homeTeam: homeTeamName,
+    awayTeam: awayTeamName,
+    startTime: estimateStartTime,
+    status,
+    playedTime: playedSeconds,
+    matchStatus,
+    score: gameScore,
+    tournament: sport?.category?.tournament?.name || '',
+    odds: mainMarket ? {
+      home: mainMarket.outcomes.find(o => o.desc === 'Home')?.odds,
+      draw: mainMarket.outcomes.find(o => o.desc === 'Draw')?.odds,
+      away: mainMarket.outcomes.find(o => o.desc === 'Away')?.odds
+    } : null,
+    overUnder: overUnderMarkets.map(market => ({
+      total: market.specifier.split('=')[1],
+      over: market.outcomes.find(o => o.desc.includes('Over'))?.odds,
+      under: market.outcomes.find(o => o.desc.includes('Under'))?.odds
+    }))
+  };
 };

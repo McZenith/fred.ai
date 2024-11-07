@@ -17,18 +17,9 @@ export const SPORTRADAR_HEADERS = {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
 };
 
-// Get the current Unix timestamp in seconds
-const currentTimestamp = Math.floor(Date.now() / 1000);
-
-// Calculate the timestamp for 3 days in seconds (3 days * 24 hours * 60 minutes * 60 seconds)
-const threeDaysInSeconds = 3 * 24 * 60 * 60;
-
-// Calculate the new timestamp for today + 3 days
-const timestampInThreeDays = currentTimestamp + threeDaysInSeconds;
-
 export const BASE_URL = 'https://lmt.fn.sportradar.com/common/en/Etc:UTC/gismo';
 
-export const SPORTRADAR_API_KEY = `?T=exp=1730934789~acl=/*~data=eyJvIjoiaHR0cHM6Ly93d3cuc3BvcnR5YmV0LmNvbSIsImEiOiI2Mzg4NDZiOTNiMjNlY2ZjOTRjZTFhNmQ0NWIxZGJlNiIsImFjdCI6Im9yaWdpbmNoZWNrIiwib3NyYyI6Im9yaWdpbiJ9~hmac=64facef14cc493f65080768f1fb2fae2c4345213d0b1426e3f6e5fec36abff32`;
+export const SPORTRADAR_API_KEY = `?T=exp=1731021189~acl=/*~data=eyJvIjoiaHR0cHM6Ly93d3cuc3BvcnR5YmV0LmNvbSIsImEiOiI2Mzg4NDZiOTNiMjNlY2ZjOTRjZTFhNmQ0NWIxZGJlNiIsImFjdCI6Im9yaWdpbmNoZWNrIiwib3NyYyI6Im9yaWdpbiJ9~hmac=7b5d41dcbf75b318c8fa1af487ed406cf7d451c7ad0475a0ba3331007ffd2bde`;
 
 export const handleError = (error) => {
   const statusCode = error.response?.status || 500;

@@ -35,3 +35,21 @@ export const PROBABILITY_THRESHOLD = 0.7;
 export const LOCAL_STORAGE_KEYS = {
   CART: 'matchCart',
 };
+
+export const API_ROUTES = {
+  MATCH_INFO: '/api/match/info',
+  MATCH_TIMELINE: '/api/match/timeline',
+  MATCH_TIMELINE_DELTA: '/api/match/timelinedelta',
+  MATCH_SITUATION: '/api/match/situation',
+  MATCH_DETAILS: '/api/match/details',
+  SEASON_META: '/api/season/meta',
+  SEASON_GOALS: '/api/season/goals',
+  SEASON_CARDS: '/api/season/cards',
+  CUP_BRACKETS: '/api/cup/brackets',
+  MATCH_PHRASES: '/api/match/phrases',
+  SEASON_TABLE: '/api/season/table',
+  MATCH_ODDS: '/api/match/odds',
+  MATCH_SQUADS: '/api/match/squads',
+  TEAM_VERSUS: '/api/team/versus',
+  TEAM_FORM: '/api/team/form',
+};

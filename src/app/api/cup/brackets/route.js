@@ -2,6 +2,7 @@ import axios from 'axios';
 import { NextResponse } from 'next/server';
 import {
   SPORTRADAR_HEADERS,
+  SPORTRADAR_API_KEY,
   BASE_URL,
   handleError,
   validateId,
@@ -15,14 +16,16 @@ export const GET = async (request) => {
     }
 
     const { searchParams } = new URL(request.url);
-    const cupId = searchParams.get('cupId');
+    const tournamentId = searchParams.get('bracketsId');
 
-    // Validate cupId
-    validateId(cupId, 'Cup');
+    const requestId = tournamentId?.toString().split(':').pop();
+
+    // Validate tournamentId
+    validateId(requestId, 'Tournament');
 
     // Add timeout and retry logic
     const fetchBrackets = async (retries = 2) => {
-      const url = `${BASE_URL}/stats_cup_brackets/${cupId}`;
+      const url = `${BASE_URL}/stats_cup_brackets/gm-${requestId}${SPORTRADAR_API_KEY}`;
 
       for (let i = 0; i < retries; i++) {
         try {

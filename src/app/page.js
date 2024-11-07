@@ -1,18 +1,17 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { MatchCard } from '@/components/MatchCard';
+import MatchCard from '@/components/MatchCard';
 import { HeaderControls } from '@/components/HeaderControls';
 import { FilterBar } from '@/components/FilterBar';
 import { Spinner } from './components/Spinner';
 import { useMatchData } from '@/hooks/useMatchData';
-import { isHighProbabilityMatch, getMatchHalf } from '@/utils/matchHelpers';
+import { isHighProbabilityMatch } from '@/utils/matchHelpers';
 import { useCart } from '@/hooks/useCart';
 
 const Home = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState(['desc']);
-  const [expandedCard, setExpandedCard] = useState(null);
   const [activeTab, setActiveTab] = useState('live');
   const [copyMessage, setCopyMessage] = useState('');
 
@@ -35,10 +34,6 @@ const Home = () => {
     removeFromCart,
     isInCart,
   } = useCart();
-
-  const toggleCard = useCallback((eventId) => {
-    setExpandedCard((prev) => (prev === eventId ? null : eventId));
-  }, []);
 
   const handleTabChange = useCallback(
     (tab) => {
@@ -101,111 +96,29 @@ const Home = () => {
         filteredData = filteredData.filter((event) => isInCart(event.eventId));
       }
 
-      // Handle half filters first
-      const hasHalfFilter = activeFilters.some((filter) =>
-        ['firstHalf', 'secondHalf', 'halftime'].includes(filter)
-      );
-
-      if (hasHalfFilter) {
-        filteredData = filteredData.filter((event) => {
-          const currentHalf = getMatchHalf(event);
-          return activeFilters.includes(currentHalf);
-        });
-      }
-
-      // Handle other filters
+      // Handle filters
       filteredData = filteredData.filter((event) => {
         return activeFilters.every((filter) => {
           switch (filter) {
             case 'desc':
             case 'asc':
               return true;
-
-            case 'firstHalf':
-              return event.matchStatus === 'H1';
-
-            case 'secondHalf':
-              return event.matchStatus === 'H2';
-
-            case 'halftime':
-              return event.matchStatus === 'HT';
-
-            case 'highProbability': {
-              const goalProb = event.enrichedData?.analysis?.goalProbability;
-              return goalProb && (goalProb.home > 0.6 || goalProb.away > 0.6);
-            }
-
-            case 'highMomentum': {
-              const momentum = event.enrichedData?.analysis?.momentum?.recent;
-              if (!momentum) return false;
-              const totalMomentum = momentum.home + momentum.away;
-              return totalMomentum > 10; // Adjust threshold as needed
-            }
-
+            case 'highProbability':
+              return isHighProbabilityMatch(event);
             case 'hasOdds':
               return event.enrichedData?.odds?.markets?.length > 0;
-
             case 'inCart':
-              return cart.some((item) => item.eventId === event.eventId);
-
-            case 'over1.5':
-            case 'over2.5':
-            case 'over3.5': {
-              if (!event.markets?.length) return false;
-
-              const total = filter.slice(4);
-              const overMarket = event.markets.find(
-                (m) =>
-                  m.desc === 'Over/Under' && m.specifier === `total=${total}`
-              );
-
-              const probability = overMarket?.outcomes?.[0]?.probability
-                ? parseFloat(overMarket.outcomes[0].probability) * 100
-                : 0;
-
-              return probability > 70;
-            }
-
+              return isInCart(event.eventId);
             default:
               return true;
           }
         });
       });
 
-      // Enhanced sorting logic
+      // Sort data
       if (activeFilters.includes('asc') || activeFilters.includes('desc')) {
         const sortDirection = activeFilters.includes('asc') ? 'asc' : 'desc';
-
         filteredData.sort((a, b) => {
-          // Primary sort by goal probability
-          const probA = Math.max(
-            a.enrichedData?.analysis?.goalProbability?.home || 0,
-            a.enrichedData?.analysis?.goalProbability?.away || 0
-          );
-          const probB = Math.max(
-            b.enrichedData?.analysis?.goalProbability?.home || 0,
-            b.enrichedData?.analysis?.goalProbability?.away || 0
-          );
-
-          if (probA !== probB) {
-            return sortDirection === 'asc' ? probA - probB : probB - probA;
-          }
-
-          // Secondary sort by momentum
-          const momentumA = a.enrichedData?.analysis?.momentum?.recent;
-          const momentumB = b.enrichedData?.analysis?.momentum?.recent;
-
-          if (momentumA && momentumB) {
-            const totalMomentumA = momentumA.home + momentumA.away;
-            const totalMomentumB = momentumB.home + momentumB.away;
-            if (totalMomentumA !== totalMomentumB) {
-              return sortDirection === 'asc'
-                ? totalMomentumA - totalMomentumB
-                : totalMomentumB - totalMomentumA;
-            }
-          }
-
-          // Tertiary sort by time
           const timeA = new Date(a.estimateStartTime || 0).getTime();
           const timeB = new Date(b.estimateStartTime || 0).getTime();
           return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
@@ -227,48 +140,8 @@ const Home = () => {
 
   const totalMatches = filteredData?.length || 0;
 
-  const getPlayerGoalProbabilities = useCallback((event) => {
-    const marketOdds = event.enrichedData?.odds?.markets || [];
-    const squadInfo = event.enrichedData?.squads;
-
-    return marketOdds
-      .filter(
-        (market) =>
-          market.desc?.includes('Goalscorer') && market.outcomes?.length > 0
-      )
-      .flatMap((market) =>
-        market.outcomes
-          .filter(
-            (outcome) => outcome.isActive === 1 && outcome.probability > 0
-          )
-          .map((outcome) => {
-            const playerName = outcome.desc.split(' & ')[0];
-            const playerInfo = squadInfo?.players?.find(
-              (p) => p.name === playerName
-            );
-
-            return {
-              playerName,
-              probability: parseFloat(outcome.probability),
-              odds: parseFloat(outcome.odds),
-              position: playerInfo?.position,
-              teamId: playerInfo?.teamId,
-              stats: playerInfo?.statistics,
-            };
-          })
-      )
-      .reduce((acc, curr) => {
-        const existing = acc.find((p) => p.playerName === curr.playerName);
-        if (!existing || existing.probability < curr.probability) {
-          return [...acc.filter((p) => p.playerName !== curr.playerName), curr];
-        }
-        return acc;
-      }, [])
-      .sort((a, b) => b.probability - a.probability);
-  }, []);
-
   return (
-    <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen flex items-center justify-center'>
+    <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen'>
       <div className='container mx-auto px-4 py-8'>
         <h1 className='text-5xl font-bold text-center mb-8 text-blue-700'>
           ⚽ Fred.ai
@@ -281,6 +154,7 @@ const Home = () => {
             </span>
           </div>
         )}
+
         <HeaderControls
           activeTab={activeTab}
           totalMatches={totalMatches}
@@ -297,20 +171,20 @@ const Home = () => {
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
           activeFilters={activeFilters}
-          toggleFilter={useCallback((filter) => {
+          toggleFilter={(filter) => {
             setActiveFilters((prev) =>
               prev.includes(filter)
                 ? prev.filter((f) => f !== filter)
                 : [...prev, filter]
             );
-          }, [])}
-          removeFilter={useCallback((filter) => {
+          }}
+          removeFilter={(filter) => {
             setActiveFilters((prev) => prev.filter((f) => f !== filter));
-          }, [])}
-          clearFilters={useCallback(() => setActiveFilters(['desc']), [])}
+          }}
+          clearFilters={() => setActiveFilters(['desc'])}
         />
 
-        <div className='space-y-8'>
+        <div className='space-y-4 mt-4'>
           {isLoading && isInitialFetch ? (
             <div className='flex justify-center items-center mt-12'>
               <Spinner className='w-12 h-12 text-blue-500' />
@@ -319,28 +193,10 @@ const Home = () => {
             filteredData?.map((event) => (
               <MatchCard
                 key={event.eventId}
-                event={{
-                  ...event,
-                  enrichedData: {
-                    ...event.enrichedData,
-                    teamStats: {
-                      home: event.enrichedData?.teams?.home,
-                      away: event.enrichedData?.teams?.away,
-                    },
-                    phrases: event.enrichedData?.phrases,
-                    timeline: event.enrichedData?.timeline,
-                    odds: event.enrichedData?.odds,
-                    squads: event.enrichedData?.squads,
-                  },
-                }}
-                isExpanded={expandedCard === event.eventId}
-                onToggle={toggleCard}
-                onAddToCart={addToCart}
-                onRemoveFromCart={removeFromCart}
-                isInCart={isInCart}
-                activeTab={activeTab}
-                highProbability={isHighProbabilityMatch(event)}
-                playerProbabilities={getPlayerGoalProbabilities(event)}
+                event={event}
+                onAddToCart={() => addToCart(event)}
+                onRemoveFromCart={() => removeFromCart(event.eventId)}
+                isInCart={isInCart(event.eventId)}
               />
             ))
           )}

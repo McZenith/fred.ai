@@ -1,10 +1,13 @@
 // utils/matchEnricher.js
-import { API_ROUTES } from '@/lib/api';
+import { API_ROUTES } from '@/utils/constants';
 
-// Fetch helper with error handling
-const fetchEndpoint = async (route, id) => {
+// Fetch helper with error handling and query parameter handling
+const fetchEndpoint = async (route, params = {}) => {
   try {
-    const response = await fetch(`${route}?matchId=${id}`);
+    const queryString = Object.entries(params)
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&');
+    const response = await fetch(`${route}?${queryString}`);
     const data = await response.json();
     return data;
   } catch (error) {
@@ -13,145 +16,191 @@ const fetchEndpoint = async (route, id) => {
   }
 };
 
-// Fetch initial match data (one-time fetch)
-const fetchInitialMatchData = async (matchId) => {
-  const seasonMeta = await fetchEndpoint(API_ROUTES.SEASON_META, matchId);
-  let brackets = null;
-
-  if (seasonMeta?.data?.cup?.id) {
-    brackets = await fetchEndpoint(
-      API_ROUTES.CUP_BRACKETS,
-      seasonMeta.data.cup.id
-    );
-  }
-
-  return { seasonMeta, brackets };
+// Fetch functions for different data types
+const fetchMatchData = {
+  info: (matchId) =>
+    fetchEndpoint(API_ROUTES.MATCH_INFO, { matchId: String(matchId) }),
+  timeline: (matchId) =>
+    fetchEndpoint(API_ROUTES.MATCH_TIMELINE, { matchId: String(matchId) }),
+  timelineDelta: (matchId) =>
+    fetchEndpoint(API_ROUTES.MATCH_TIMELINE_DELTA, {
+      matchId: String(matchId),
+    }),
+  situation: (matchId) =>
+    fetchEndpoint(API_ROUTES.MATCH_SITUATION, { matchId: String(matchId) }),
+  details: (matchId) =>
+    fetchEndpoint(API_ROUTES.MATCH_DETAILS, { matchId: String(matchId) }),
+  phrases: (matchId) =>
+    fetchEndpoint(API_ROUTES.MATCH_PHRASES, { matchId: String(matchId) }),
+  odds: (matchId) =>
+    fetchEndpoint(API_ROUTES.MATCH_ODDS, { matchId: String(matchId) }),
+  squads: (matchId) =>
+    fetchEndpoint(API_ROUTES.MATCH_SQUADS, { matchId: String(matchId) }),
 };
 
-// Fetch real-time match data (frequent updates)
-const fetchRealtimeMatchData = async (matchId) => {
-  const [timelineDelta, matchInfo] = await Promise.all([
-    fetchEndpoint(API_ROUTES.MATCH_TIMELINE_DELTA, matchId),
-    fetchEndpoint(API_ROUTES.MATCH_INFO, matchId),
-  ]);
-
-  return { timelineDelta, matchInfo };
-};
-
-// Fetch match statistics (less frequent updates)
-const fetchMatchStats = async (matchId) => {
-  const [situation, details] = await Promise.all([
-    fetchEndpoint(API_ROUTES.MATCH_SITUATION, matchId),
-    fetchEndpoint(API_ROUTES.MATCH_DETAILS, matchId),
-  ]);
-
-  return { situation, details };
+const fetchTeamData = {
+  versus: (teamId1, teamId2) =>
+    fetchEndpoint(API_ROUTES.TEAM_VERSUS, { teamId1, teamId2 }),
+  form: (teamId) => fetchEndpoint(API_ROUTES.TEAM_FORM, { teamId }),
 };
 
 // Analysis functions
-const analyzeMatchMomentum = (situation, timelineDelta) => {
-  if (!situation?.data?.data) return null;
+const analyzeMatchMomentum = (
+  situation,
+  timelineDelta,
+  details,
+  completeTimeline
+) => {
+  if (!situation?.data) return null;
 
-  const lastMinutes = situation.data.data.slice(-5);
-  return {
+  const lastMinutes = situation.data.slice(-5);
+  const momentum = {
     recent: lastMinutes.reduce(
       (acc, minute) => ({
-        home: acc.home + (minute.home.dangerous * 2 + minute.home.attack),
-        away: acc.away + (minute.away.dangerous * 2 + minute.away.attack),
+        home:
+          acc.home + (minute.home.dangerouscount * 2 + minute.home.attackcount),
+        away:
+          acc.away + (minute.away.dangerouscount * 2 + minute.away.attackcount),
       }),
       { home: 0, away: 0 }
     ),
-    delta: timelineDelta?.data?.match?.result || null,
+    delta: timelineDelta?.match?.result || null,
     trend: lastMinutes.map((minute) => ({
       minute: minute.time,
-      homeIntensity: minute.home.dangerous + minute.home.attack,
-      awayIntensity: minute.away.dangerous + minute.away.attack,
+      homeIntensity: minute.home.dangerouscount + minute.home.attackcount,
+      awayIntensity: minute.away.dangerouscount + minute.away.attackcount,
     })),
+    timeline: completeTimeline || null,
   };
+
+  // Add possession impact
+  const possession = details?.values?.['110']?.value || { home: 50, away: 50 };
+  momentum.possession = {
+    home: parseInt(possession.home) || 50,
+    away: parseInt(possession.away) || 50,
+  };
+
+  return momentum;
 };
 
-const calculateMatchStats = (details, situation) => {
-  if (!details?.data?.values) return null;
+const calculateMatchStats = (details, completeTimeline) => {
+  if (!details?.values) return null;
 
-  const stats = details.data.values;
   return {
     attacks: {
-      home: parseInt(stats['1126']?.value?.home || 0),
-      away: parseInt(stats['1126']?.value?.away || 0),
+      home: parseInt(details.values['1126']?.value?.home || 0),
+      away: parseInt(details.values['1126']?.value?.away || 0),
     },
     dangerous: {
-      home: parseInt(stats['1029']?.value?.home || 0),
-      away: parseInt(stats['1029']?.value?.away || 0),
+      home: parseInt(details.values['1029']?.value?.home || 0),
+      away: parseInt(details.values['1029']?.value?.away || 0),
     },
     possession: {
-      home: parseInt(stats.ballsafepercentage?.value?.home || 0),
-      away: parseInt(stats.ballsafepercentage?.value?.away || 0),
+      home: parseInt(details.values['110']?.value?.home || 0),
+      away: parseInt(details.values['110']?.value?.away || 0),
+    },
+    shots: {
+      onTarget: {
+        home: parseInt(details.values['125']?.value?.home || 0),
+        away: parseInt(details.values['125']?.value?.away || 0),
+      },
+      offTarget: {
+        home: parseInt(details.values['126']?.value?.home || 0),
+        away: parseInt(details.values['126']?.value?.away || 0),
+      },
     },
     corners: {
-      home: parseInt(stats['124']?.value?.home || 0),
-      away: parseInt(stats['124']?.value?.away || 0),
+      home: parseInt(details.values['124']?.value?.home || 0),
+      away: parseInt(details.values['124']?.value?.away || 0),
     },
+    cards: {
+      yellow: {
+        home: parseInt(details.values['40']?.value?.home || 0),
+        away: parseInt(details.values['40']?.value?.away || 0),
+      },
+      red: {
+        home: parseInt(details.values['50']?.value?.home || 0),
+        away: parseInt(details.values['50']?.value?.away || 0),
+      },
+    },
+    timeline: completeTimeline
+      ? {
+          events: completeTimeline.events || [],
+          periods: completeTimeline.periods || [],
+        }
+      : null,
   };
 };
 
 const calculateGoalProbability = (momentum, stats) => {
   if (!momentum || !stats) return null;
 
-  const weights = {
-    recentMomentum: 0.3,
-    attacks: 0.2,
-    dangerous: 0.3,
-    possession: 0.2,
+  const calculateTeamProbability = (team) => {
+    const momentumScore = momentum.recent[team] * 0.3;
+    const attackScore = (stats.attacks[team] / 2) * 0.2;
+    const dangerousScore = stats.dangerous[team] * 0.25;
+    const possessionScore = (stats.possession[team] / 2) * 0.15;
+    const shotsScore =
+      ((stats.shots.onTarget[team] * 2 + stats.shots.offTarget[team]) / 3) *
+      0.1;
+
+    return (
+      momentumScore +
+      attackScore +
+      dangerousScore +
+      possessionScore +
+      shotsScore
+    );
   };
 
-  const homeScore =
-    (momentum.recent.home / (momentum.recent.home + momentum.recent.away)) *
-      weights.recentMomentum +
-    (stats.attacks.home / (stats.attacks.home + stats.attacks.away)) *
-      weights.attacks +
-    (stats.dangerous.home / (stats.dangerous.home + stats.dangerous.away)) *
-      weights.dangerous +
-    (stats.possession.home / 100) * weights.possession;
-
-  const awayScore =
-    (momentum.recent.away / (momentum.recent.home + momentum.recent.away)) *
-      weights.recentMomentum +
-    (stats.attacks.away / (stats.attacks.home + stats.attacks.away)) *
-      weights.attacks +
-    (stats.dangerous.away / (stats.dangerous.home + stats.dangerous.away)) *
-      weights.dangerous +
-    (stats.possession.away / 100) * weights.possession;
-
-  return { home: homeScore, away: awayScore };
+  return {
+    home: calculateTeamProbability('home'),
+    away: calculateTeamProbability('away'),
+  };
 };
 
-const generateRecommendation = (stats, goalProbability) => {
-  const recommendation = {
-    type:
-      goalProbability?.home > goalProbability?.away ? 'HOME_GOAL' : 'AWAY_GOAL',
-    confidence: Math.max(
-      goalProbability?.home || 0,
-      goalProbability?.away || 0
-    ),
-    reasons: [],
-  };
+const generateRecommendation = (stats, probability) => {
+  if (!stats || !probability) return null;
 
-  if (stats) {
-    if (stats.dangerous.home > stats.dangerous.away * 1.5) {
-      recommendation.reasons.push('Home team creating more dangerous attacks');
-    }
-    if (stats.dangerous.away > stats.dangerous.home * 1.5) {
-      recommendation.reasons.push('Away team creating more dangerous attacks');
-    }
-    if (stats.possession.home > 60) {
-      recommendation.reasons.push('Home team dominating possession');
-    }
-    if (stats.possession.away > 60) {
-      recommendation.reasons.push('Away team dominating possession');
-    }
+  const homeStrength = probability.home;
+  const awayStrength = probability.away;
+  const threshold = 65; // Adjustable threshold
+
+  let type = null;
+  let confidence = 0;
+  const reasons = [];
+
+  if (homeStrength > threshold) {
+    type = 'HOME_GOAL';
+    confidence = Math.min(100, Math.round(homeStrength));
+    reasons.push(
+      'Strong home team momentum',
+      stats.dangerous.home > stats.dangerous.away * 1.5
+        ? 'Dominant attacking presence'
+        : null,
+      stats.possession.home > 60 ? 'Controlling possession' : null
+    );
+  } else if (awayStrength > threshold) {
+    type = 'AWAY_GOAL';
+    confidence = Math.min(100, Math.round(awayStrength));
+    reasons.push(
+      'Strong away team momentum',
+      stats.dangerous.away > stats.dangerous.home * 1.5
+        ? 'Dominant attacking presence'
+        : null,
+      stats.possession.away > 60 ? 'Controlling possession' : null
+    );
+  } else {
+    type = 'NO_GOAL';
+    confidence = Math.min(100, Math.round(homeStrength + awayStrength));
+    reasons.push('No clear momentum');
   }
 
-  return recommendation;
+  return {
+    type,
+    confidence,
+    reasons: reasons.filter(Boolean),
+  };
 };
 
 // Export the enrichment functions
@@ -159,44 +208,91 @@ export const enrichMatch = {
   initial: async (match) => {
     try {
       const matchId = match.eventId.toString().split(':').pop();
-      const initialData = await fetchInitialMatchData(matchId);
+      const tournamentId = match.sport?.category?.tournament?.id;
+      const bracketsId = match.eventId;
+
+      // Fetch all data in parallel
+      const [
+        matchInfo,
+        squads,
+        odds,
+        homeForm,
+        awayForm,
+        headToHead,
+        timeline,
+        timelineDelta,
+        seasonMeta,
+        cupBrackets,
+        seasonGoals,
+        seasonCards,
+        seasonTable,
+        situation,
+        details,
+        phrases,
+      ] = await Promise.all([
+        fetchMatchData.info(matchId),
+        fetchMatchData.squads(matchId),
+        fetchMatchData.odds(matchId),
+        fetchTeamData.form(match.homeTeamId),
+        fetchTeamData.form(match.awayTeamId),
+        fetchTeamData.versus(match.homeTeamId, match.awayTeamId),
+        fetchMatchData.timeline(matchId),
+        fetchMatchData.timelineDelta(matchId),
+        fetchEndpoint(API_ROUTES.SEASON_META, { tournamentId }),
+        fetchEndpoint(API_ROUTES.CUP_BRACKETS, { bracketsId }),
+        fetchEndpoint(API_ROUTES.SEASON_GOALS, { tournamentId }),
+        fetchEndpoint(API_ROUTES.SEASON_CARDS, { tournamentId }),
+        fetchEndpoint(API_ROUTES.SEASON_TABLE, { tournamentId }),
+        fetchMatchData.situation(matchId),
+        fetchMatchData.details(matchId),
+        fetchMatchData.phrases(matchId),
+      ]);
+
+      // Merge timeline data
+      const mergedTimeline = {
+        complete: timeline?.doc?.[0]?.data || timeline?.doc || null,
+        delta: timelineDelta?.doc?.[0]?.data || timelineDelta?.data || null,
+      };
+
+      // Analyze match data
+      const momentum = analyzeMatchMomentum(
+        situation?.doc?.[0]?.data || situation?.data,
+        timelineDelta?.doc?.[0]?.data || timelineDelta?.data,
+        details?.doc?.[0]?.data || details?.data,
+        mergedTimeline.complete
+      );
+
+      const stats = calculateMatchStats(
+        details?.doc?.[0]?.data || details?.data,
+        mergedTimeline.complete
+      );
+
+      const goalProbability = calculateGoalProbability(momentum, stats);
+      const recommendation = generateRecommendation(stats, goalProbability);
 
       return {
         ...match,
         enrichedData: {
-          season: initialData.seasonMeta?.doc,
-          tournament: initialData.brackets?.doc,
-          analysis: {},
-        },
-      };
-    } catch (error) {
-      console.error('Error in initial match enrichment:', error);
-      return match;
-    }
-  },
+          matchInfo: matchInfo?.doc?.[0].data,
+          squads: squads?.doc?.[0].data || squads?.doc || null,
+          odds: odds?.doc?.[0].data || odds?.doc || null,
+          timeline: mergedTimeline,
+          form: {
+            home: homeForm?.doc?.[0].data || null,
+            away: awayForm?.doc?.[0].data || null,
+          },
+          h2h: headToHead?.doc?.[0].data || null,
+          tournament: {
+            cupBrackets: cupBrackets?.doc?.[0].data || null,
+            seasonMeta: seasonMeta?.doc?.[0].data || null,
+            goals: seasonGoals?.doc?.[0].data || null,
+            cards: seasonCards?.doc?.[0].data || null,
+            table: seasonTable?.doc?.[0].data || null,
+          },
+          situation: situation?.doc?.[0]?.data || situation?.doc || null,
+          details: details?.doc?.[0]?.data || details?.doc || null,
+          phrases: phrases?.doc?.[0]?.data || phrases?.doc || null,
 
-  realtime: async (match) => {
-    try {
-      const matchId = match.eventId.toString().split(':').pop();
-      const realtimeData = await fetchRealtimeMatchData(matchId);
-      const statsData = await fetchMatchStats(matchId);
-
-      const momentum = analyzeMatchMomentum(
-        statsData.situation,
-        realtimeData.timelineDelta
-      );
-      const stats = calculateMatchStats(statsData.details, statsData.situation);
-      const goalProbability = calculateGoalProbability(momentum, stats);
-      const recommendation = generateRecommendation(stats, goalProbability);
-
-      const newMatch = {
-        ...match,
-        enrichedData: {
-          ...match.enrichedData,
-          matchInfo: realtimeData.matchInfo?.doc[0]?.data,
-          timelineDelta: realtimeData.timelineDelta?.doc[0]?.data,
-          situation: statsData.situation?.doc[0]?.data,
-          details: statsData.details?.doc[0]?.data,
           analysis: {
             momentum,
             stats,
@@ -205,10 +301,14 @@ export const enrichMatch = {
           },
         },
       };
-      return newMatch;
     } catch (error) {
-      console.error('Error in realtime match enrichment:', error);
+      console.error('Error in match enrichment:', error);
       return match;
     }
   },
+
+  // Alias realtime to initial for consistent interface
+  realtime: async (match) => enrichMatch.initial(match),
 };
+
+

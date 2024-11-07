@@ -9,7 +9,21 @@ export const useMatchData = () => {
   const [isInitialFetch, setIsInitialFetch] = useState(true);
   const [error, setError] = useState(null);
 
+  const hasValidData = (data) => {
+    return (
+      Array.isArray(data) &&
+      data.length > 0 &&
+      data.every(
+        (match) =>
+          match.enrichedData &&
+          match.enrichedData.analysis &&
+          match.tournamentName
+      )
+    );
+  };
+
   const fetchAndEnrichLiveData = async () => {
+    setIsLoading(true);
     try {
       const response = await fetch('/api/getData', { cache: 'no-store' });
       const result = await response.json();
@@ -54,14 +68,48 @@ export const useMatchData = () => {
       // Initial enrichment on first load
       if (isInitialFetch) {
         const initialEnriched = await Promise.all(
-          flattenedData.map((match) => enrichMatch.initial(match))
+          flattenedData.map(async (match) => {
+            const [initialData, realtimeData] = await Promise.all([
+              enrichMatch.initial(match),
+              enrichMatch.realtime(match),
+            ]);
+
+            return {
+              ...match,
+              enrichedData: {
+                ...initialData?.enrichedData,
+                ...realtimeData?.enrichedData,
+              },
+            };
+          })
         );
-        setLiveData(initialEnriched);
+
+        // Only update if we have valid enriched data
+        if (hasValidData(initialEnriched)) {
+          setLiveData(initialEnriched);
+          setIsLoading(false);
+        }
+        return;
       }
 
       // Realtime enrichment
       const enrichedData = await Promise.all(
-        flattenedData.map((match) => enrichMatch.realtime(match))
+        flattenedData.map(async (match) => {
+          const realtimeData = await enrichMatch.realtime(match);
+          const initialData = liveData.find(
+            (existingMatch) =>
+              existingMatch.id === match.id ||
+              existingMatch.matchId === match.matchId
+          );
+
+          return {
+            ...realtimeData,
+            enrichedData: {
+              ...initialData?.enrichedData,
+              ...realtimeData.enrichedData,
+            },
+          };
+        })
       );
 
       const sortedData = enrichedData.sort((a, b) => {
@@ -76,57 +124,70 @@ export const useMatchData = () => {
         return bProb - aProb;
       });
 
-      setLiveData(sortedData);
+      // Only update if we have valid sorted data
+      if (hasValidData(sortedData)) {
+        setLiveData(sortedData);
+        setIsLoading(false);
+      }
     } catch (error) {
       console.error('Error fetching live data:', error);
       setError(error);
-    } finally {
       setIsLoading(false);
+    } finally {
       setIsInitialFetch(false);
     }
   };
 
   const fetchUpcomingData = async () => {
+    setIsLoading(true);
     try {
       const response = await fetch('/api/getUpcomingData', {
         cache: 'no-store',
       });
       const result = await response.json();
 
-      // Add error handling for missing data
-      if (!result || !result.data) {
+      if (!result?.data) {
         console.error('Invalid upcoming data structure received:', result);
         setError(new Error('Invalid upcoming data received from server'));
+        setUpcomingData([]); // Set empty array as fallback
         return;
       }
 
+      // Handle different possible data structures consistently
       let flattenedData = [];
-      if (result.data.tournaments) {
-        flattenedData = result.data.tournaments.flatMap((tournament) => {
-          if (tournament.events && Array.isArray(tournament.events)) {
-            return tournament.events.map((event) => ({
-              ...event,
-              tournamentName: tournament.name,
-            }));
-          }
-          return [];
-        });
-      } else if (Array.isArray(result.data)) {
-        flattenedData = result.data.flatMap((tournament) => {
-          if (tournament.events && Array.isArray(tournament.events)) {
-            return tournament.events.map((event) => ({
-              ...event,
-              tournamentName: tournament.name,
-            }));
-          }
-          return [];
-        });
+
+      // Safely handle array structure
+      if (Array.isArray(result.data) && result.data.length > 0) {
+        flattenedData = result.data
+          .filter((tournament) => tournament && tournament.events)
+          .flatMap((tournament) => {
+            return Array.isArray(tournament.events)
+              ? tournament.events.map((event) => ({
+                  ...event,
+                  tournamentName: tournament.name || 'Unknown Tournament',
+                }))
+              : [];
+          });
+      }
+      // Safely handle object structure
+      else if (result.data?.tournaments) {
+        flattenedData = (result.data.tournaments || [])
+          .filter((tournament) => tournament && tournament.events)
+          .flatMap((tournament) => {
+            return Array.isArray(tournament.events)
+              ? tournament.events.map((event) => ({
+                  ...event,
+                  tournamentName: tournament.name || 'Unknown Tournament',
+                }))
+              : [];
+          });
       }
 
       setUpcomingData(flattenedData);
     } catch (error) {
       console.error('Error fetching upcoming data:', error);
       setError(error);
+      setUpcomingData([]); // Set empty array on error
     } finally {
       setIsLoading(false);
     }
@@ -135,7 +196,6 @@ export const useMatchData = () => {
   // Initial fetch
   useEffect(() => {
     const initializeData = async () => {
-      setIsLoading(true);
       try {
         await Promise.all([fetchAndEnrichLiveData(), fetchUpcomingData()]);
       } catch (error) {

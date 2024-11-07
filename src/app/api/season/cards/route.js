@@ -45,7 +45,7 @@ export const GET = async (request) => {
     }
 
     const fetchSeasonMeta = async (retries = 2) => {
-      const url = `${BASE_URL}/stats_season_meta/${requestId}${SPORTRADAR_API_KEY}`;
+      const url = `${BASE_URL}/stats_season_topcards/${requestId}${SPORTRADAR_API_KEY}`;
       const timestamp = Date.now();
 
       for (let i = 0; i < retries; i++) {

@@ -52,9 +52,6 @@ export const GET = async (request) => {
     if (data === null) {
       return new NextResponse(null, {
         status: 304,
-        headers: {
-          'Cache-Control': 'private, max-age=30', // Cache for 30 seconds
-        },
       });
     }
 
@@ -87,26 +84,6 @@ export const GET = async (request) => {
       },
     });
   }
-};
-
-// Optional: Add simple in-memory cache
-const CACHE = new Map();
-const CACHE_TTL = 30000; // 30 seconds
-
-const getFromCache = (matchId) => {
-  const cached = CACHE.get(matchId);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
-  }
-  CACHE.delete(matchId); // Clean up expired cache
-  return null;
-};
-
-const setCache = (matchId, data) => {
-  CACHE.set(matchId, {
-    data,
-    timestamp: Date.now(),
-  });
 };
 
 export const revalidate = 0;
