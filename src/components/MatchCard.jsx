@@ -481,7 +481,7 @@ const CurrentForm = ({ team }) => {
         </div>
         <div className='text-right text-sm'>
           <div className='font-medium text-gray-900'>
-            {team.matches.length} matches
+            {team?.matches?.length} matches
           </div>
           <div className='text-gray-500'>
             {wins}W - {draws}D - {losses}L

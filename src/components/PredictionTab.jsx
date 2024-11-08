@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { TrendingUp, Activity, Goal } from 'lucide-react';
 
 const PredictionTab = ({ details, h2h, form, currentScore }) => {
   const [predictions, setPredictions] = useState({
@@ -27,110 +28,97 @@ const PredictionTab = ({ details, h2h, form, currentScore }) => {
   const calculatePredictions = useMemo(() => {
     try {
       // Initialize base scores
-      let homeScore = 52;
-      let awayScore = 48;
+      let homeScore = 50;
+      let awayScore = 50;
 
-      // Log details to verify structure
-      console.log('Details:', details);
-      console.log('H2H:', h2h);
+      const stats = details?.values || {};
 
       // Helper function to safely get stat values
       const getValue = (statName, team) => {
-        return details?.values?.[team]?.[statName]?.value
-          ? parseInt(details.values[team][statName].value)
-          : 0;
+        const value = parseInt(stats?.[statName]?.value?.[team]);
+        return isNaN(value) ? 0 : value;
       };
 
-      // Current Match Stats
-      const homeFouls = getValue('fouls', 'home');
-      const awayFouls = getValue('fouls', 'away');
+      // Get all stats
       const homePoss = getValue('possession', 'home');
       const awayPoss = getValue('possession', 'away');
-      const homeAttackSuccess = getValue('attackSuccess', 'home');
-      const awayAttackSuccess = getValue('attackSuccess', 'away');
-      const homeShotAccuracy = getValue('shotAccuracy', 'home');
-      const awayShotAccuracy = getValue('shotAccuracy', 'away');
+      const homeAttacks = getValue('attacks', 'home');
+      const awayAttacks = getValue('attacks', 'away');
+      const homeDangerous = getValue('dangerousAttacks', 'home');
+      const awayDangerous = getValue('dangerousAttacks', 'away');
+      const homeShotsOn = getValue('shotsOnTarget', 'home');
+      const awayShotsOn = getValue('shotsOnTarget', 'away');
+      const homeShotsOff = getValue('shotsOffTarget', 'home');
+      const awayShotsOff = getValue('shotsOffTarget', 'away');
       const homeCorners = getValue('corners', 'home');
       const awayCorners = getValue('corners', 'away');
+      const homeFouls = getValue('fouls', 'home');
+      const awayFouls = getValue('fouls', 'away');
 
-      // Current Score Parsing
-      const [homeGoals, awayGoals] = (
-        currentScore?.split(':') || ['0', '0']
-      ).map(Number);
+      // Calculate attack metrics
+      const homeTotalShots = homeShotsOn + homeShotsOff;
+      const awayTotalShots = awayShotsOn + awayShotsOff;
+      const homeShotAccuracy =
+        homeTotalShots > 0 ? (homeShotsOn / homeTotalShots) * 100 : 0;
+      const awayShotAccuracy =
+        awayTotalShots > 0 ? (awayShotsOn / awayTotalShots) * 100 : 0;
 
-      // Incorporate H2H Data
-      if (h2h?.matches) {
-        const homeTeamName = details?.home?.team?.name;
-        const awayTeamName = details?.away?.team?.name;
+      // Calculate attack success rates
+      const homeAttackSuccess =
+        homeAttacks > 0 ? (homeDangerous / homeAttacks) * 100 : 0;
+      const awayAttackSuccess =
+        awayAttacks > 0 ? (awayDangerous / awayAttacks) * 100 : 0;
 
-        if (homeTeamName && awayTeamName) {
-          const homeWins = h2h.matches.filter(
-            (match) =>
-              match.teams.home.name === homeTeamName &&
-              match.result.winner === 'home'
-          ).length;
+      // Parse current score directly
+      const [homeGoals, awayGoals] = (currentScore || '0:0')
+        .split(':')
+        .map(Number);
 
-          const awayWins = h2h.matches.filter(
-            (match) =>
-              match.teams.away.name === awayTeamName &&
-              match.result.winner === 'away'
-          ).length;
+      // Positive Score Adjustments
+      // 1. Possession Impact (max 15 points)
+      homeScore += (homePoss / 100) * 15;
+      awayScore += (awayPoss / 100) * 15;
 
-          // Adjust scores based on head-to-head results
-          homeScore += homeWins * 2; // Add points for home wins
-          awayScore += awayWins * 2; // Add points for away wins
-        }
+      // 2. Attack Impact (max 20 points)
+      homeScore += (homeAttackSuccess / 100) * 20;
+      awayScore += (awayAttackSuccess / 100) * 20;
+
+      // 3. Dangerous Attacks (max 25 points)
+      if (homeDangerous > 0 || awayDangerous > 0) {
+        const totalDangerous = homeDangerous + awayDangerous;
+        homeScore += (homeDangerous / totalDangerous) * 25;
+        awayScore += (awayDangerous / totalDangerous) * 25;
+      }
+
+      // 4. Shot Accuracy (max 20 points)
+      homeScore += (homeShotAccuracy / 100) * 20;
+      awayScore += (awayShotAccuracy / 100) * 20;
+
+      // 5. Set Pieces Impact (max 10 points)
+      homeScore += homeCorners * 2;
+      awayScore += awayCorners * 2;
+
+      // Current score impact (15 points)
+      if (homeGoals > awayGoals) {
+        homeScore += 15;
+      } else if (awayGoals > homeGoals) {
+        awayScore += 15;
       }
 
       // Negative Adjustments
-      homeScore -= homeFouls * 2; // Deduct points for home team fouls
-      awayScore -= awayFouls * 2; // Deduct points for away team fouls
+      // 1. Fouls (-2 points each)
+      homeScore -= homeFouls * 2;
+      awayScore -= awayFouls * 2;
 
-      if (homeAttackSuccess < 20) homeScore -= 10; // Deduct points for poor home attack success
-      if (awayAttackSuccess < 20) awayScore -= 10; // Deduct points for poor away attack success
-
-      // Current Score Impact
-      const goalDiff = homeGoals - awayGoals;
-      if (goalDiff > 0) {
-        homeScore += Math.max(15 - (goalDiff - 1) * 5, 5); // Add points for leading home team
-      } else if (goalDiff < 0) {
-        awayScore += Math.max(15 - (Math.abs(goalDiff) - 1) * 5, 5); // Add points for leading away team
-      }
-
-      // Positive Adjustments
-      if (form?.length > 0) {
-        const lastForm = form[0]?.form;
-        if (lastForm) {
-          const recentForm = lastForm.total['3'] || 0;
-          const formImpact = recentForm * 10; // Scale form impact
-          homeScore += formImpact; // Add points for home team form
-          awayScore += 1 - formImpact; // Adjust away team form
-        }
-      }
-
-      if (homePoss > 0 || awayPoss > 0) {
-        const totalPoss = homePoss + awayPoss;
-        homeScore += (homePoss / totalPoss) * 15; // Add points for home possession
-        awayScore += (awayPoss / totalPoss) * 15; // Add points for away possession
-      }
-
-      homeScore += (homeAttackSuccess / 100) * 20; // Add points for home attack success
-      awayScore += (awayAttackSuccess / 100) * 20; // Add points for away attack success
-
-      homeScore += (homeShotAccuracy / 100) * 20; // Add points for home shot accuracy
-      awayScore += (awayShotAccuracy / 100) * 20; // Add points for away shot accuracy
-
-      const totalCorners = homeCorners + awayCorners;
-      if (totalCorners > 0) {
-        homeScore += (homeCorners / totalCorners) * 10; // Add points for home corners
-        awayScore += (awayCorners / totalCorners) * 10; // Add points for away corners
-      }
+      // 2. Poor Attack Success Penalty (max -10 points)
+      if (homeAttackSuccess < 20) homeScore -= 10;
+      if (awayAttackSuccess < 20) awayScore -= 10;
 
       // Ensure minimum score is 10
       homeScore = Math.max(10, homeScore);
       awayScore = Math.max(10, awayScore);
 
-      // Calculate final probabilities
+      // Calculate probabilities
       const total = homeScore + awayScore;
       const homeProbability = Math.round((homeScore / total) * 100);
       const awayProbability = 100 - homeProbability;
@@ -198,14 +186,14 @@ const PredictionTab = ({ details, h2h, form, currentScore }) => {
         <div className='flex justify-around items-center'>
           <div className='text-center'>
             <div className='text-6xl font-bold text-blue-500'>
-              {predictions.stats?.home?.goals || 0}
+              {predictions.stats.home.goals || 0}
             </div>
             <div className='text-sm text-gray-600 mt-2'>Home</div>
           </div>
           <div className='text-2xl text-gray-400'>-</div>
           <div className='text-center'>
             <div className='text-6xl font-bold text-gray-400'>
-              {predictions.stats?.away?.goals || 0}
+              {predictions.stats.away.goals || 0}
             </div>
             <div className='text-sm text-gray-600 mt-2'>Away</div>
           </div>
@@ -266,6 +254,53 @@ const PredictionTab = ({ details, h2h, form, currentScore }) => {
             <div className='flex justify-between'>
               <span className='text-gray-600'>Possession:</span>
               <span>{predictions.stats.away.possession}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Scoring Factors */}
+      <div className='bg-white rounded-lg border shadow-sm p-6'>
+        <h3 className='text-lg font-semibold text-gray-900 mb-4'>
+          Scoring Factors
+        </h3>
+        <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
+          <div className='p-4 bg-emerald-50 rounded-lg'>
+            <div className='flex items-center gap-2 mb-2'>
+              <Goal className='text-emerald-600' size={20} />
+              <span className='font-medium text-gray-700'>
+                Positive Factors
+              </span>
+            </div>
+            <div className='text-sm text-gray-600 space-y-1'>
+              <div>Possession: +15 max</div>
+              <div>Attack Success: +20 max</div>
+              <div>Shot Accuracy: +20 max</div>
+              <div>Each Corner: +2 points</div>
+            </div>
+          </div>
+
+          <div className='p-4 bg-amber-50 rounded-lg'>
+            <div className='flex items-center gap-2 mb-2'>
+              <TrendingUp className='text-amber-600' size={20} />
+              <span className='font-medium text-gray-700'>Score Impact</span>
+            </div>
+            <div className='text-sm text-gray-600 space-y-1'>
+              <div>Leading Team: +15 points</div>
+              <div>Dangerous Attacks: +25 max</div>
+              <div>High Possession: +15 max</div>
+            </div>
+          </div>
+
+          <div className='p-4 bg-rose-50 rounded-lg'>
+            <div className='flex items-center gap-2 mb-2'>
+              <Activity className='text-rose-600' size={20} />
+              <span className='font-medium text-gray-700'>Penalties</span>
+            </div>
+            <div className='text-sm text-gray-600 space-y-1'>
+              <div>Each Foul: -2 points</div>
+              <div>Poor Attack Rate: -10 points</div>
+              <div>Minimum Score: 10 points</div>
             </div>
           </div>
         </div>

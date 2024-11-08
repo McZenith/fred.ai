@@ -86,7 +86,21 @@ export const useMatchData = () => {
 
         // Only update if we have valid enriched data
         if (hasValidData(initialEnriched)) {
-          setLiveData(initialEnriched);
+          setLiveData(
+            initialEnriched.filter(
+              (match) =>
+                !match.ai &&
+                (typeof match.tournamentName === 'string'
+                  ? !match.tournamentName.toLowerCase().includes('srl')
+                  : true) &&
+                (typeof match.homeTeamName === 'string'
+                  ? !match.homeTeamName.toLowerCase().includes('srl')
+                  : true) &&
+                (typeof match.awayTeamName === 'string'
+                  ? !match.awayTeamName.toLowerCase().includes('srl')
+                  : true)
+            )
+          );
           setIsLoading(false);
         }
         return;
