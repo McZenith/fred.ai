@@ -1,5 +1,5 @@
 // hooks/useMatchData.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { enrichMatch } from '@/utils/matchEnricher';
 
 export const useMatchData = () => {
@@ -9,7 +9,10 @@ export const useMatchData = () => {
   const [isInitialFetch, setIsInitialFetch] = useState(true);
   const [error, setError] = useState(null);
 
-  const hasValidData = (data) => {
+  const updateIntervalRef = useRef(null);
+  const isPausedRef = useRef(false);
+
+  const hasValidData = useCallback((data) => {
     return (
       Array.isArray(data) &&
       data.length > 0 &&
@@ -20,25 +23,45 @@ export const useMatchData = () => {
           match.tournamentName
       )
     );
-  };
+  }, []);
 
-  const fetchAndEnrichLiveData = async () => {
+  const processMatchData = useCallback((match, initialData = null) => {
+    return {
+      ...match,
+      _stableKey: JSON.stringify({
+        id: match.eventId || match.matchId,
+        score: match.setScore,
+        time: match.playedSeconds,
+        status: match.matchStatus?.name,
+        analysis: {
+          stats: match.enrichedData?.analysis?.stats,
+          momentum: match.enrichedData?.analysis?.momentum?.trend,
+          timeline: match.enrichedData?.analysis?.momentum?.timeline,
+        },
+      }),
+      enrichedData: {
+        ...initialData?.enrichedData,
+        ...match.enrichedData,
+      },
+    };
+  }, []);
+
+  const fetchAndEnrichLiveData = useCallback(async () => {
+    if (isPausedRef.current) return;
+
     setIsLoading(true);
     try {
       const response = await fetch('/api/getData', { cache: 'no-store' });
       const result = await response.json();
 
-      // Add error handling for missing data
       if (!result || !result.data) {
         console.error('Invalid data structure received:', result);
         setError(new Error('Invalid data received from server'));
         return;
       }
 
-      // Handle different possible data structures
       let flattenedData = [];
       if (Array.isArray(result.data)) {
-        // If data is an array of tournaments
         flattenedData = result.data.flatMap((tournament) => {
           if (tournament.events && Array.isArray(tournament.events)) {
             return tournament.events.map((event) => ({
@@ -49,7 +72,6 @@ export const useMatchData = () => {
           return [];
         });
       } else if (result.data.tournaments) {
-        // If data has a tournaments property
         flattenedData = result.data.tournaments.flatMap((tournament) => {
           if (tournament.events && Array.isArray(tournament.events)) {
             return tournament.events.map((event) => ({
@@ -60,12 +82,10 @@ export const useMatchData = () => {
           return [];
         });
       } else {
-        console.error('Unexpected data structure:', result);
         setError(new Error('Unexpected data structure received'));
         return;
       }
 
-      // Initial enrichment on first load
       if (isInitialFetch) {
         const initialEnriched = await Promise.all(
           flattenedData.map(async (match) => {
@@ -73,40 +93,30 @@ export const useMatchData = () => {
               enrichMatch.initial(match),
               enrichMatch.realtime(match),
             ]);
-
-            return {
+            return processMatchData({
               ...match,
               enrichedData: {
                 ...initialData?.enrichedData,
                 ...realtimeData?.enrichedData,
               },
-            };
+            });
           })
         );
 
-        // Only update if we have valid enriched data
         if (hasValidData(initialEnriched)) {
           setLiveData(
             initialEnriched.filter(
               (match) =>
                 !match.ai &&
-                (typeof match.tournamentName === 'string'
-                  ? !match.tournamentName.toLowerCase().includes('srl')
-                  : true) &&
-                (typeof match.homeTeamName === 'string'
-                  ? !match.homeTeamName.toLowerCase().includes('srl')
-                  : true) &&
-                (typeof match.awayTeamName === 'string'
-                  ? !match.awayTeamName.toLowerCase().includes('srl')
-                  : true)
+                !match.tournamentName?.toLowerCase().includes('srl') &&
+                !match.homeTeamName?.toLowerCase().includes('srl') &&
+                !match.awayTeamName?.toLowerCase().includes('srl')
             )
           );
-          setIsLoading(false);
         }
         return;
       }
 
-      // Realtime enrichment
       const enrichedData = await Promise.all(
         flattenedData.map(async (match) => {
           const realtimeData = await enrichMatch.realtime(match);
@@ -115,14 +125,7 @@ export const useMatchData = () => {
               existingMatch.id === match.id ||
               existingMatch.matchId === match.matchId
           );
-
-          return {
-            ...realtimeData,
-            enrichedData: {
-              ...initialData?.enrichedData,
-              ...realtimeData.enrichedData,
-            },
-          };
+          return processMatchData(realtimeData, initialData);
         })
       );
 
@@ -138,21 +141,37 @@ export const useMatchData = () => {
         return bProb - aProb;
       });
 
-      // Only update if we have valid sorted data
       if (hasValidData(sortedData)) {
-        setLiveData(sortedData);
-        setIsLoading(false);
+        setLiveData((prevData) => {
+          const newData = sortedData.filter(
+            (match) =>
+              !match.ai &&
+              !match.tournamentName?.toLowerCase().includes('srl') &&
+              !match.homeTeamName?.toLowerCase().includes('srl') &&
+              !match.awayTeamName?.toLowerCase().includes('srl')
+          );
+
+          // Only update if data has actually changed and updates aren't paused
+          if (
+            JSON.stringify(prevData.map((m) => m._stableKey)) ===
+              JSON.stringify(newData.map((m) => m._stableKey)) ||
+            isPausedRef.current
+          ) {
+            return prevData;
+          }
+          return newData;
+        });
       }
     } catch (error) {
       console.error('Error fetching live data:', error);
       setError(error);
-      setIsLoading(false);
     } finally {
+      setIsLoading(false);
       setIsInitialFetch(false);
     }
-  };
+  }, [isInitialFetch, liveData, processMatchData, hasValidData]);
 
-  const fetchUpcomingData = async () => {
+  const fetchUpcomingData = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await fetch('/api/getUpcomingData', {
@@ -163,49 +182,82 @@ export const useMatchData = () => {
       if (!result?.data) {
         console.error('Invalid upcoming data structure received:', result);
         setError(new Error('Invalid upcoming data received from server'));
-        setUpcomingData([]); // Set empty array as fallback
+        setUpcomingData([]);
         return;
       }
 
-      // Handle different possible data structures consistently
       let flattenedData = [];
 
-      // Safely handle array structure
-      if (Array.isArray(result.data) && result.data.length > 0) {
+      if (Array.isArray(result.data)) {
         flattenedData = result.data
           .filter((tournament) => tournament && tournament.events)
           .flatMap((tournament) => {
             return Array.isArray(tournament.events)
-              ? tournament.events.map((event) => ({
-                  ...event,
-                  tournamentName: tournament.name || 'Unknown Tournament',
-                }))
+              ? tournament.events.map((event) =>
+                  processMatchData({
+                    ...event,
+                    tournamentName: tournament.name || 'Unknown Tournament',
+                  })
+                )
               : [];
           });
-      }
-      // Safely handle object structure
-      else if (result.data?.tournaments) {
+      } else if (result.data?.tournaments) {
         flattenedData = (result.data.tournaments || [])
           .filter((tournament) => tournament && tournament.events)
           .flatMap((tournament) => {
             return Array.isArray(tournament.events)
-              ? tournament.events.map((event) => ({
-                  ...event,
-                  tournamentName: tournament.name || 'Unknown Tournament',
-                }))
+              ? tournament.events.map((event) =>
+                  processMatchData({
+                    ...event,
+                    tournamentName: tournament.name || 'Unknown Tournament',
+                  })
+                )
               : [];
           });
       }
 
-      setUpcomingData(flattenedData);
+      setUpcomingData((prevData) => {
+        const newData = flattenedData.filter(
+          (match) =>
+            !match.ai &&
+            !match.tournamentName?.toLowerCase().includes('srl') &&
+            !match.homeTeamName?.toLowerCase().includes('srl')
+        );
+
+        // Only update if data has actually changed
+        if (
+          JSON.stringify(prevData.map((m) => m._stableKey)) ===
+          JSON.stringify(newData.map((m) => m._stableKey))
+        ) {
+          return prevData;
+        }
+        return newData;
+      });
     } catch (error) {
       console.error('Error fetching upcoming data:', error);
       setError(error);
-      setUpcomingData([]); // Set empty array on error
+      setUpcomingData([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [processMatchData]);
+
+  // Pause updates
+  const pauseUpdates = useCallback(() => {
+    isPausedRef.current = true;
+    if (updateIntervalRef.current) {
+      clearInterval(updateIntervalRef.current);
+      updateIntervalRef.current = null;
+    }
+  }, []);
+
+  // Resume updates
+  const resumeUpdates = useCallback(() => {
+    isPausedRef.current = false;
+    if (!updateIntervalRef.current) {
+      updateIntervalRef.current = setInterval(fetchAndEnrichLiveData, 10000);
+    }
+  }, [fetchAndEnrichLiveData]);
 
   // Initial fetch
   useEffect(() => {
@@ -219,18 +271,30 @@ export const useMatchData = () => {
     };
 
     initializeData();
-  }, []);
+  }, [fetchAndEnrichLiveData, fetchUpcomingData]);
 
   // Polling for live matches
   useEffect(() => {
     if (isInitialFetch) return;
 
-    const intervalId = setInterval(() => {
-      fetchAndEnrichLiveData();
-    }, 10000); // Every 10 seconds
+    updateIntervalRef.current = setInterval(fetchAndEnrichLiveData, 10000);
+    // hooks/useMatchData.js (continued)
 
-    return () => clearInterval(intervalId);
-  }, [isInitialFetch]);
+    return () => {
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+      }
+    };
+  }, [isInitialFetch, fetchAndEnrichLiveData]);
+
+  // Add cleanup for component unmount
+  useEffect(() => {
+    return () => {
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+      }
+    };
+  }, []);
 
   return {
     liveData,
@@ -240,5 +304,7 @@ export const useMatchData = () => {
     error,
     refreshLiveData: fetchAndEnrichLiveData,
     refreshUpcomingData: fetchUpcomingData,
+    pauseUpdates,
+    resumeUpdates,
   };
 };

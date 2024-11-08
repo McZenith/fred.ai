@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useTransition } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useTransition,
+  useRef,
+} from 'react';
 import { CartProvider, useCart } from '@/hooks/useCart';
 import { FilterProvider, useFilter } from '@/hooks/filterContext';
 import { useMatchData } from '@/hooks/useMatchData';
@@ -32,15 +38,65 @@ const MatchCardSkeleton = () => (
   </div>
 );
 
-const MatchList = React.memo(({ matches }) => (
-  <div className='space-y-4 transition-opacity duration-200'>
-    {matches.map((event) => (
-      <div key={event.eventId}>
-        <MatchCard event={event} />
-      </div>
-    ))}
-  </div>
-));
+// Optimized MatchCard wrapper with height preservation
+const StableMatchCard = React.memo(({ event }) => {
+  const cardRef = useRef(null);
+  const [minHeight, setMinHeight] = useState('auto');
+  
+  // Set initial height after first render
+  React.useEffect(() => {
+    if (cardRef.current) {
+      const height = cardRef.current.getBoundingClientRect().height;
+      setMinHeight(`${height}px`);
+    }
+  }, []);
+
+  // Create a stable key for the match data that only changes when important data changes
+  const stableKey = useMemo(() => {
+    return JSON.stringify({
+      score: event.setScore,
+      time: event.playedSeconds,
+      status: event.matchStatus?.name,
+      stats: event.enrichedData?.analysis?.stats,
+      momentum: event.enrichedData?.analysis?.momentum?.trend,
+      timeline: event.enrichedData?.analysis?.momentum?.timeline
+    });
+  }, [event]);
+
+  return (
+    <div ref={cardRef} style={{ minHeight }} className="transition-all duration-300">
+      <MatchCard event={event} stableKey={stableKey} />
+    </div>
+  );
+}, (prev, next) => {
+  // Custom comparison function
+  if (prev.event === next.event) return true;
+  
+  // Compare only essential fields
+  const essentialFieldsEqual = 
+    prev.event.setScore === next.event.setScore &&
+    prev.event.playedSeconds === next.event.playedSeconds &&
+    prev.event.matchStatus?.name === next.event.matchStatus?.name &&
+    JSON.stringify(prev.event.enrichedData?.analysis?.stats) === 
+    JSON.stringify(next.event.enrichedData?.analysis?.stats) &&
+    JSON.stringify(prev.event.enrichedData?.analysis?.momentum?.trend) ===
+    JSON.stringify(next.event.enrichedData?.analysis?.momentum?.trend);
+
+  return essentialFieldsEqual;
+});
+
+const MatchList = React.memo(({ matches }) => {
+  // Create stable reference for the match list
+  const stableMatches = useMemo(() => matches, [matches]);
+
+  return (
+    <div className='space-y-4 transition-opacity duration-200'>
+      {stableMatches.map((event) => (
+        <StableMatchCard key={`${event.eventId}`} event={event} />
+      ))}
+    </div>
+  );
+});
 
 MatchList.displayName = 'MatchList';
 
@@ -64,6 +120,7 @@ const HomeContent = () => {
   const [activeTab, setActiveTab] = useState('live');
   const [copyMessage, setCopyMessage] = useState('');
   const [isPending, startTransition] = useTransition();
+  const [isPaused, setIsPaused] = useState(false);
 
   const { isInCart, showCartOnly } = useCart();
   const { applyFilters } = useFilter();
@@ -75,6 +132,8 @@ const HomeContent = () => {
     error,
     refreshLiveData,
     refreshUpcomingData,
+    pauseUpdates,
+    resumeUpdates,
   } = useMatchData();
 
   const handleTabChange = useCallback(
@@ -91,6 +150,19 @@ const HomeContent = () => {
     [refreshLiveData, refreshUpcomingData]
   );
 
+  const handleTogglePause = useCallback(() => {
+    setIsPaused((prev) => {
+      const newState = !prev;
+      if (newState) {
+        pauseUpdates();
+      } else {
+        resumeUpdates();
+      }
+      return newState;
+    });
+  }, [pauseUpdates, resumeUpdates]);
+
+  // Stabilize filtered data
   const filteredData = useMemo(() => {
     const sourceData = activeTab === 'live' ? liveData : upcomingData;
     let filtered = sourceData;
@@ -100,7 +172,7 @@ const HomeContent = () => {
     }
 
     return applyFilters(filtered, isInCart);
-  }, [activeTab, liveData, upcomingData, applyFilters, isInCart, showCartOnly]);
+  }, [activeTab, liveData, upcomingData, showCartOnly, isInCart, applyFilters]);
 
   const copyHomeTeams = useCallback(() => {
     const dataToCopy = filteredData
@@ -144,6 +216,8 @@ const HomeContent = () => {
           onTabChange={handleTabChange}
           onCopyHomeTeams={copyHomeTeams}
           copyMessage={copyMessage}
+          isPaused={isPaused}
+          onTogglePause={handleTogglePause}
         />
 
         <FilterBar />
@@ -165,7 +239,11 @@ const HomeContent = () => {
             </div>
           )}
 
-          {showMatchList && <MatchList matches={filteredData} />}
+          {showMatchList && (
+            <React.Suspense fallback={null}>
+              <MatchList matches={filteredData} />
+            </React.Suspense>
+          )}
 
           <LoadingOverlay show={isLoading && !isInitialFetch} />
         </div>
@@ -174,10 +252,13 @@ const HomeContent = () => {
   );
 };
 
+// Wrap the entire app with providers and Suspense
 const Home = () => (
   <CartProvider>
     <FilterProvider>
-      <HomeContent />
+      <React.Suspense fallback={null}>
+        <HomeContent />
+      </React.Suspense>
     </FilterProvider>
   </CartProvider>
 );

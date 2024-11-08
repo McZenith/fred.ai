@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
-
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react';
 import {
   Card,
   CardContent,
@@ -22,9 +27,9 @@ import {
   Target,
   Flag,
   AlertCircle,
+  Activity,
   Users,
   Ticket,
-  Activity,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -38,8 +43,21 @@ import {
 import { useCart } from '../hooks/useCart';
 import TournamentTable from './TournamentTable';
 import PredictionTab from './PredictionTab';
+
 // Utility Components
-const StatComparison = ({ label, home, away, total }) => {
+const StatItem = React.memo(({ label, value, icon: Icon }) => (
+  <div className='flex items-center gap-3 p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300'>
+    <div className='p-2.5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg'>
+      <Icon size={18} className='text-gray-700' />
+    </div>
+    <div>
+      <div className='text-sm font-medium text-gray-500'>{label}</div>
+      <div className='text-lg font-semibold text-gray-900'>{value}</div>
+    </div>
+  </div>
+));
+
+const StatComparison = React.memo(({ label, home, away, total }) => {
   const homePercent = (home / total) * 100;
   const awayPercent = (away / total) * 100;
 
@@ -62,21 +80,9 @@ const StatComparison = ({ label, home, away, total }) => {
       </div>
     </div>
   );
-};
+});
 
-const StatItem = ({ label, value, icon: Icon }) => (
-  <div className='flex items-center gap-3 p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300'>
-    <div className='p-2.5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg'>
-      <Icon size={18} className='text-gray-700' />
-    </div>
-    <div>
-      <div className='text-sm font-medium text-gray-500'>{label}</div>
-      <div className='text-lg font-semibold text-gray-900'>{value}</div>
-    </div>
-  </div>
-);
-
-const TimelineEvent = ({ event }) => {
+const TimelineEvent = React.memo(({ event }) => {
   const getEventIcon = (type) => {
     switch (type.toLowerCase()) {
       case 'shotontarget':
@@ -129,10 +135,10 @@ const TimelineEvent = ({ event }) => {
       </div>
     </div>
   );
-};
+});
 
-const MomentumChart = ({ data, homeTeam, awayTeam }) => {
-  const CustomTooltip = ({ active, payload, label }) => {
+const MomentumChart = React.memo(({ data, homeTeam, awayTeam }) => {
+  const CustomTooltip = React.memo(({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
         <div className='bg-white p-3 shadow-lg rounded-xl border border-gray-100 text-sm'>
@@ -151,7 +157,7 @@ const MomentumChart = ({ data, homeTeam, awayTeam }) => {
       );
     }
     return null;
-  };
+  });
 
   return (
     <div className='w-full h-48 mt-4'>
@@ -190,6 +196,7 @@ const MomentumChart = ({ data, homeTeam, awayTeam }) => {
             stroke='#3b82f6'
             strokeWidth={2}
             fill='url(#homeGradient)'
+            isAnimationActive={false}
           />
           <Area
             type='monotone'
@@ -197,113 +204,38 @@ const MomentumChart = ({ data, homeTeam, awayTeam }) => {
             stroke='#ef4444'
             strokeWidth={2}
             fill='url(#awayGradient)'
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>
     </div>
   );
-};
+});
 
-// Continue with Batch 2...
-
-// ... Previous Batch 1 code remains the same ...
-
-// Supporting Components
-const MarketOddsCard = ({ market, children }) => {
-  const getProbabilityColor = (probability) => {
-    const prob = parseFloat(probability);
-    if (prob >= 0.7) {
-      // 70% or higher
-      return 'bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300';
-    }
-    return 'hover:bg-gray-50 hover:border-gray-300';
-  };
-
-  const formatProbability = (probability) => {
-    return (parseFloat(probability) * 100).toFixed(1) + '%';
-  };
-
-  return (
-    <Card className='bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300'>
-      <div className='p-5'>
-        <div className='flex justify-between items-start mb-4'>
-          <div className='space-y-1'>
-            <h3 className='font-semibold text-gray-900'>{market.desc}</h3>
-            <p className='text-sm text-gray-500'>{market.name}</p>
-          </div>
-          {market.farNearOdds !== 0 && (
-            <Badge
-              variant='secondary'
-              className={`text-xs ${
-                market.farNearOdds === 1
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'bg-red-50 text-red-600'
-              }`}
-            >
-              {market.farNearOdds === 1 ? 'Favorite' : 'Underdog'}
-            </Badge>
-          )}
-        </div>
-
-        <div className='grid grid-cols-3 gap-3'>
-          {market.outcomes
-            .filter((outcome) => outcome.isActive === 1)
-            .map((outcome, idx) => (
-              <Button
-                key={idx}
-                variant='outline'
-                className={`flex flex-col items-center p-3 h-auto transition-all ${getProbabilityColor(
-                  outcome.probability
-                )}`}
-              >
-                <div className='text-sm text-gray-600 mb-1 text-center'>
-                  {outcome.desc}
-                </div>
-                <div className='font-bold text-gray-900'>{outcome.odds}</div>
-                <div
-                  className={`text-xs mt-1 ${
-                    parseFloat(outcome.probability) >= 0.7
-                      ? 'text-green-600 font-medium'
-                      : 'text-gray-500'
-                  }`}
-                >
-                  {formatProbability(outcome.probability)}
-                </div>
-              </Button>
-            ))}
-        </div>
-
-        {children && (
-          <div className='mt-4 pt-4 border-t border-gray-100'>{children}</div>
-        )}
-      </div>
-    </Card>
-  );
-};
-
-const DetailStats = ({ details }) => {
-  // Filter out period-specific stats and empty values
-  const relevantStats = Object.entries(details?.values || {}).filter(
-    ([key, value]) =>
-      !key.includes('period') &&
-      (value.value.home !== '' || value.value.away !== '')
-  );
+const DetailStats = React.memo(({ details }) => {
+  const relevantStats = useMemo(() => {
+    return Object.entries(details?.values || {}).filter(
+      ([key, value]) =>
+        !key.includes('period') &&
+        (value.value.home !== '' || value.value.away !== '')
+    );
+  }, [details]);
 
   return (
     <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
       {relevantStats.map(([key, stat]) => (
         <div
           key={key}
-          className='bg-white p-4 rounded-xl shadow-sm border border-gray-100'
+          className='bg-white p-4 rounded-xl shadow-sm border border-gray-100 transition-all duration-300 hover:shadow-md'
         >
           <h4 className='text-sm font-medium text-gray-500 mb-2'>
             {stat.name}
           </h4>
           <div className='flex justify-between items-center'>
-            <span className='text-lg font-semibold text-blue-600'>
+            <span className='text-lg font-semibold text-blue-600 transition-all duration-300'>
               {stat.value.home}
             </span>
-            <span className='text-lg font-semibold text-red-600'>
+            <span className='text-lg font-semibold text-red-600 transition-all duration-300'>
               {stat.value.away}
             </span>
           </div>
@@ -311,19 +243,40 @@ const DetailStats = ({ details }) => {
       ))}
     </div>
   );
-};
+});
 
-const SituationTimeline = ({ situations }) => {
-  const timelineData =
-    situations?.map((situation) => ({
-      minute: situation.time,
-      homeAttacks: situation.home.attackcount,
-      homeDangerous: situation.home.dangerouscount,
-      homeSafe: situation.home.safecount,
-      awayAttacks: situation.away.attackcount,
-      awayDangerous: situation.away.dangerouscount,
-      awaySafe: situation.away.safecount,
-    })) || [];
+// Continue with part 2...
+const SituationTimeline = React.memo(({ situations }) => {
+  const timelineData = useMemo(() => {
+    return (
+      situations?.map((situation) => ({
+        minute: situation.time,
+        homeAttacks: situation.home.attackcount,
+        homeDangerous: situation.home.dangerouscount,
+        homeSafe: situation.home.safecount,
+        awayAttacks: situation.away.attackcount,
+        awayDangerous: situation.away.dangerouscount,
+        awaySafe: situation.away.safecount,
+      })) || []
+    );
+  }, [situations]);
+
+  const CustomTooltip = React.memo(({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className='bg-white p-3 shadow-lg rounded-xl border border-gray-100'>
+          <p className='font-medium text-gray-900 mb-2'>Minute {label}</p>
+          <div className='space-y-1 text-sm'>
+            <p className='text-blue-600'>Home Attacks: {payload[0].value}</p>
+            <p className='text-blue-800'>Home Dangerous: {payload[1].value}</p>
+            <p className='text-red-600'>Away Attacks: {payload[2].value}</p>
+            <p className='text-red-800'>Away Dangerous: {payload[3].value}</p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  });
 
   return (
     <div className='space-y-6'>
@@ -372,40 +325,14 @@ const SituationTimeline = ({ situations }) => {
                 axisLine={false}
                 stroke='#9ca3af'
               />
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (active && payload && payload.length) {
-                    return (
-                      <div className='bg-white p-3 shadow-lg rounded-xl border border-gray-100'>
-                        <p className='font-medium text-gray-900 mb-2'>
-                          Minute {label}
-                        </p>
-                        <div className='space-y-1 text-sm'>
-                          <p className='text-blue-600'>
-                            Home Attacks: {payload[0].value}
-                          </p>
-                          <p className='text-blue-800'>
-                            Home Dangerous: {payload[1].value}
-                          </p>
-                          <p className='text-red-600'>
-                            Away Attacks: {payload[2].value}
-                          </p>
-                          <p className='text-red-800'>
-                            Away Dangerous: {payload[3].value}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
+              <Tooltip content={<CustomTooltip />} />
               <Area
                 type='monotone'
                 dataKey='homeAttacks'
                 stroke='#3b82f6'
                 fill='url(#homeAttackGradient)'
                 strokeWidth={2}
+                isAnimationActive={false}
               />
               <Area
                 type='monotone'
@@ -413,6 +340,7 @@ const SituationTimeline = ({ situations }) => {
                 stroke='#1d4ed8'
                 fill='none'
                 strokeWidth={2}
+                isAnimationActive={false}
               />
               <Area
                 type='monotone'
@@ -420,6 +348,7 @@ const SituationTimeline = ({ situations }) => {
                 stroke='#ef4444'
                 fill='url(#awayAttackGradient)'
                 strokeWidth={2}
+                isAnimationActive={false}
               />
               <Area
                 type='monotone'
@@ -427,6 +356,7 @@ const SituationTimeline = ({ situations }) => {
                 stroke='#b91c1c'
                 fill='none'
                 strokeWidth={2}
+                isAnimationActive={false}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -434,30 +364,32 @@ const SituationTimeline = ({ situations }) => {
       </div>
     </div>
   );
-};
+});
 
-const CurrentForm = ({ team }) => {
-  // Initialize counters
-  let wins = 0;
-  let draws = 0;
-  let losses = 0;
-  let totalGoals = 0;
+const CurrentForm = React.memo(({ team }) => {
+  const formStats = useMemo(() => {
+    let wins = 0;
+    let draws = 0;
+    let losses = 0;
+    let totalGoals = 0;
 
-  // Count results
-  if (team?.matches) {
-    team.matches.forEach((match) => {
-      totalGoals += match.result.home;
-      if (match.result.home > match.result.away) wins++;
-      else if (match.result.home < match.result.away) losses++;
-      else draws++;
-    });
-  }
+    if (team?.matches) {
+      team.matches.forEach((match) => {
+        totalGoals += match.result.home;
+        if (match.result.home > match.result.away) wins++;
+        else if (match.result.home < match.result.away) losses++;
+        else draws++;
+      });
+    }
 
-  const averageGoals = team.matches?.length
-    ? (totalGoals / team.matches.length).toFixed(2)
-    : 0;
+    const averageGoals = team.matches?.length
+      ? (totalGoals / team.matches.length).toFixed(2)
+      : 0;
 
-  const getResultClass = (result) => {
+    return { wins, draws, losses, totalGoals, averageGoals };
+  }, [team]);
+
+  const getResultClass = useCallback((result) => {
     switch (result) {
       case 'W':
         return 'bg-gradient-to-br from-green-500 to-green-600';
@@ -466,17 +398,17 @@ const CurrentForm = ({ team }) => {
       default:
         return 'bg-gradient-to-br from-gray-500 to-gray-600';
     }
-  };
+  }, []);
 
   return (
-    <Card className='p-5 space-y-4'>
+    <Card className='p-5 space-y-4 transition-all duration-300 hover:shadow-lg'>
       <div className='flex items-center justify-between'>
         <div className='space-y-1'>
           <h4 className='font-semibold text-gray-900'>
             {team?.team?.name || 'Unknown Team'}
           </h4>
           <p className='text-sm text-gray-500'>
-            Avg Goals: {averageGoals} per match
+            Avg Goals: {formStats.averageGoals} per match
           </p>
         </div>
         <div className='text-right text-sm'>
@@ -484,17 +416,17 @@ const CurrentForm = ({ team }) => {
             {team?.matches?.length} matches
           </div>
           <div className='text-gray-500'>
-            {wins}W - {draws}D - {losses}L
+            {formStats.wins}W - {formStats.draws}D - {formStats.losses}L
           </div>
         </div>
       </div>
 
       <div className='flex flex-wrap gap-2'>
-        {team.matches?.map((match) => (
+        {team.matches?.map((match, index) => (
           <div
-            key={match._id}
+            key={`${match._id}-${index}`}
             className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-medium shadow-sm
-              ${getResultClass(
+              transition-all duration-300 hover:scale-105 ${getResultClass(
                 match.result.home > match.result.away
                   ? 'W'
                   : match.result.home < match.result.away
@@ -514,10 +446,10 @@ const CurrentForm = ({ team }) => {
 
       <ScrollArea className='h-[200px] w-full rounded-md'>
         <div className='space-y-2'>
-          {team.matches?.map((match) => (
+          {team.matches?.map((match, index) => (
             <div
-              key={match._id}
-              className='flex items-center justify-between text-sm p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors'
+              key={`${match._id}-list-${index}`}
+              className='flex items-center justify-between text-sm p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors duration-300'
             >
               <div className='text-gray-600'>
                 {new Date(match.time.uts * 1000).toLocaleDateString()}
@@ -534,178 +466,479 @@ const CurrentForm = ({ team }) => {
       </ScrollArea>
     </Card>
   );
-};
+});
 
-// Continue with Batch 3...
+const MarketOddsCard = React.memo(({ market, children }) => {
+  const getProbabilityColor = useCallback((probability) => {
+    const prob = parseFloat(probability);
+    if (prob >= 0.7) {
+      return 'bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300';
+    }
+    return 'hover:bg-gray-50 hover:border-gray-300';
+  }, []);
 
-// ... Previous Batches' code remains the same ...
+  const formatProbability = useCallback((probability) => {
+    return (parseFloat(probability) * 100).toFixed(1) + '%';
+  }, []);
 
+  return (
+    <Card className='bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300'>
+      <div className='p-5'>
+        <div className='flex justify-between items-start mb-4'>
+          <div className='space-y-1'>
+            <h3 className='font-semibold text-gray-900'>{market.desc}</h3>
+            <p className='text-sm text-gray-500'>{market.name}</p>
+          </div>
+          {market.farNearOdds !== 0 && (
+            <Badge
+              variant='secondary'
+              className={`text-xs ${
+                market.farNearOdds === 1
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'bg-red-50 text-red-600'
+              }`}
+            >
+              {market.farNearOdds === 1 ? 'Favorite' : 'Underdog'}
+            </Badge>
+          )}
+        </div>
+
+        <div className='grid grid-cols-3 gap-3'>
+          {market.outcomes
+            .filter((outcome) => outcome.isActive === 1)
+            .map((outcome, idx) => (
+              <Button
+                key={`${outcome.id}-${idx}`}
+                variant='outline'
+                className={`flex flex-col items-center p-3 h-auto transition-all duration-300 
+                  ${getProbabilityColor(outcome.probability)}`}
+              >
+                <div className='text-sm text-gray-600 mb-1 text-center'>
+                  {outcome.desc}
+                </div>
+                <div className='font-bold text-gray-900'>{outcome.odds}</div>
+                <div
+                  className={`text-xs mt-1 ${
+                    parseFloat(outcome.probability) >= 0.7
+                      ? 'text-green-600 font-medium'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  {formatProbability(outcome.probability)}
+                </div>
+              </Button>
+            ))}
+        </div>
+
+        {children && (
+          <div className='mt-4 pt-4 border-t border-gray-100'>{children}</div>
+        )}
+      </div>
+    </Card>
+  );
+});
+
+// Continue with Main MatchCard Component...
+// Main MatchCard Component
 const MatchCard = ({ event }) => {
+  const cardRef = useRef(null);
+  const [prevScore, setPrevScore] = useState(event.setScore);
+  const [scoreOpacity, setScoreOpacity] = useState(1);
   const [expanded, setExpanded] = useState(false);
+  const [prevEvent, setPrevEvent] = useState(event);
   const { addToCart, removeFromCart, isInCart } = useCart();
+  const [activeTab, setActiveTab] = useState('stats');
 
-  const handleToggle = () => {
+  // Memoize core data calculations
+  const {
+    analysis,
+    stats,
+    momentum,
+    h2h,
+    form,
+    tournament,
+    coreMetrics,
+    trendData,
+  } = useMemo(() => {
+    const analysis = event?.enrichedData?.analysis;
+    const stats = analysis?.stats;
+    const momentum = analysis?.momentum;
+
+    return {
+      analysis,
+      stats,
+      momentum,
+      h2h: event?.enrichedData?.h2h,
+      form: event?.enrichedData?.form,
+      tournament: event?.enrichedData?.tournament,
+      coreMetrics: {
+        possession: {
+          total:
+            (stats?.possession?.home || 0) + (stats?.possession?.away || 0),
+          home: stats?.possession?.home || 0,
+          away: stats?.possession?.away || 0,
+        },
+        attacks: {
+          total: (stats?.attacks?.home || 0) + (stats?.attacks?.away || 0),
+          home: stats?.attacks?.home || 0,
+          away: stats?.attacks?.away || 0,
+        },
+        dangerous: {
+          total: (stats?.dangerous?.home || 0) + (stats?.dangerous?.away || 0),
+          home: stats?.dangerous?.home || 0,
+          away: stats?.dangerous?.away || 0,
+        },
+      },
+      trendData:
+        momentum?.trend?.map((t) => ({
+          minute: t.minute,
+          home: t.homeIntensity,
+          away: t.awayIntensity,
+        })) || [],
+    };
+  }, [event?.enrichedData]);
+
+  // Handle smooth transitions for score updates
+  useEffect(() => {
+    if (prevEvent.setScore !== event.setScore) {
+      const scoreElement = document.querySelector('.score-display');
+      if (scoreElement) {
+        scoreElement.style.transition = 'opacity 0.3s ease';
+        scoreElement.style.opacity = '0';
+        setTimeout(() => {
+          setPrevEvent(event);
+          scoreElement.style.opacity = '1';
+        }, 300);
+      } else {
+        setPrevEvent(event);
+      }
+    }
+  }, [event, prevEvent]);
+
+  const handleToggle = useCallback(() => {
     if (isInCart(event.eventId)) {
       removeFromCart(event.eventId);
     } else {
       addToCart(event);
     }
-  };
+  }, [event.eventId, isInCart, addToCart, removeFromCart]);
 
-  // Data extraction and calculations
-  const analysis = event.enrichedData?.analysis;
-  const stats = analysis?.stats;
-  const momentum = analysis?.momentum;
-  const h2h = event.enrichedData?.h2h;
-  const form = event.enrichedData?.form;
-  const tournament = event.enrichedData?.tournament;
+  const details = event.enrichedData?.details;
+  let [homeGoals, awayGoals] = event.setScore.split(':').map(Number);
+  // Handle smooth score transitions
+  useEffect(() => {
+    if (prevScore !== event.setScore) {
+      setScoreOpacity(0);
+      const timer = setTimeout(() => {
+        setPrevScore(event.setScore);
+        setScoreOpacity(1);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [event.setScore, prevScore]);
 
-  // Core metrics calculations
-  const coreMetrics = {
-    possession: {
-      total: (stats?.possession?.home || 0) + (stats?.possession?.away || 0),
-      home: stats?.possession?.home || 0,
-      away: stats?.possession?.away || 0,
-    },
-    attacks: {
-      total: (stats?.attacks?.home || 0) + (stats?.attacks?.away || 0),
-      home: stats?.attacks?.home || 0,
-      away: stats?.attacks?.away || 0,
-    },
-    dangerous: {
-      total: (stats?.dangerous?.home || 0) + (stats?.dangerous?.away || 0),
-      home: stats?.dangerous?.home || 0,
-      away: stats?.dangerous?.away || 0,
-    },
-  };
+  // Modified score display section with transitions
+  const scoreDisplay = (
+    <div
+      className='flex flex-col items-center px-8'
+      style={{ opacity: scoreOpacity, transition: 'opacity 0.3s ease' }}
+    >
+      <div className='text-5xl font-bold tracking-tighter mb-2 bg-gradient-to-r from-blue-600 to-red-600 bg-clip-text text-transparent'>
+        {prevScore}
+      </div>
+      <div className='flex items-center gap-2 px-4 py-1.5 bg-white rounded-full shadow-sm border border-gray-200'>
+        <Clock size={14} className='text-gray-500' />
+        <span className='text-sm font-medium text-gray-700'>
+          {event.playedSeconds || '0'}'
+        </span>
+      </div>
+      <div className='mt-3 px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-sm font-medium'>
+        {event.matchStatus?.name}
+      </div>
+    </div>
+  );
 
-  const trendData =
-    momentum?.trend?.map((t) => ({
-      minute: t.minute,
-      home: t.homeIntensity,
-      away: t.awayIntensity,
-    })) || [];
-
-  return (
-    <div className='w-full max-w-[1920px] mx-auto p-4'>
-      <Card className='bg-white shadow-xl rounded-2xl overflow-hidden'>
-        {/* Header Section */}
-        <div className='p-6 bg-gradient-to-r from-gray-50 via-white to-gray-50 border-b'>
-          <div className='flex justify-between items-center mb-6'>
-            <div className='space-y-1'>
-              <h2 className='text-xl font-semibold text-gray-900'>
-                {event.sport.category.tournament.name}
-              </h2>
-              {event.round && (
-                <Badge variant='secondary' className='text-sm'>
-                  Round {event.round}
-                </Badge>
-              )}
-            </div>
-            <Button
-              variant='outline'
-              size='icon'
-              onClick={handleToggle}
-              className={`rounded-full p-3 relative transition-all duration-300 ${
-                isInCart(event.eventId)
-                  ? 'bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-600'
-                  : 'bg-gray-50 text-gray-600 hover:bg-green-50 hover:text-green-600'
+  // Memoized header section
+  const HeaderSection = useMemo(
+    () => (
+      <div className='p-6 bg-gradient-to-r from-gray-50 via-white to-gray-50 border-b'>
+        <div className='flex justify-between items-center mb-6'>
+          <div className='space-y-1'>
+            <h2 className='text-xl font-semibold text-gray-900'>
+              {event.sport.category.tournament.name}
+            </h2>
+            {event.round && (
+              <Badge variant='secondary' className='text-sm'>
+                Round {event.round}
+              </Badge>
+            )}
+          </div>
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={handleToggle}
+            className={`rounded-full p-3 relative transition-all duration-300 ${
+              isInCart(event.eventId)
+                ? 'bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-600'
+                : 'bg-gray-50 text-gray-600 hover:bg-green-50 hover:text-green-600'
+            }`}
+          >
+            <ShoppingCart
+              size={20}
+              className={`transition-transform duration-300 ${
+                isInCart(event.eventId) ? 'scale-110' : 'scale-100'
               }`}
-              title={
-                isInCart(event.eventId) ? 'Remove from cart' : 'Add to cart'
-              }
-            >
-              <ShoppingCart
-                size={20}
-                className={`transition-transform duration-300 ${
-                  isInCart(event.eventId) ? 'scale-110' : 'scale-100'
-                }`}
-              />
-              {isInCart(event.eventId) && (
-                <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full ring-2 ring-white animate-pulse' />
-              )}
-            </Button>
+            />
+            {isInCart(event.eventId) && (
+              <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full ring-2 ring-white animate-pulse' />
+            )}
+          </Button>
+        </div>
+
+        <div className='flex items-center justify-between gap-4 p-6 bg-white rounded-xl shadow-sm min-h-[180px]'>
+          <div className='flex-1 text-right space-y-2'>
+            <h3 className='text-3xl font-bold text-gray-900 transition-all duration-300'>
+              {event.homeTeamName}
+            </h3>
+            <span className='text-sm text-gray-500'>Home</span>
           </div>
 
-          {/* Score Section */}
-          <div className='flex items-center justify-between gap-4 p-6 bg-white rounded-xl shadow-sm'>
-            <div className='flex-1 text-right space-y-2'>
-              <h3 className='text-3xl font-bold text-gray-900'>
-                {event.homeTeamName}
-              </h3>
-              <span className='text-sm text-gray-500'>Home</span>
-            </div>
+          {scoreDisplay}
 
-            <div className='flex flex-col items-center px-8'>
-              <div className='text-5xl font-bold tracking-tighter mb-2 bg-gradient-to-r from-blue-600 to-red-600 bg-clip-text text-transparent'>
-                {event.setScore}
+          <div className='flex-1 space-y-2'>
+            <h3 className='text-3xl font-bold text-gray-900 transition-all duration-300'>
+              {event.awayTeamName}
+            </h3>
+            <span className='text-sm text-gray-500'>Away</span>
+          </div>
+        </div>
+      </div>
+    ),
+    [
+      event.homeTeamName,
+      event.awayTeamName,
+      event.setScore,
+      event.playedSeconds,
+      event.matchStatus,
+      isInCart,
+      handleToggle,
+    ]
+  );
+
+  // Memoized statistics section
+  const StatisticsSection = useMemo(
+    () => (
+      <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8 min-h-[120px]'>
+        <StatItem
+          label='Shots on Target'
+          value={`${stats?.shots?.onTarget?.home || 0} - ${
+            stats?.shots?.onTarget?.away || 0
+          }`}
+          icon={Target}
+        />
+        <StatItem
+          label='Shots off Target'
+          value={`${stats?.shots?.offTarget?.home || 0} - ${
+            stats?.shots?.offTarget?.away || 0
+          }`}
+          icon={Target}
+        />
+        <StatItem
+          label='Corner Kicks'
+          value={`${stats?.corners?.home || 0} - ${stats?.corners?.away || 0}`}
+          icon={Flag}
+        />
+        <StatItem
+          label='Yellow Cards'
+          value={`${stats?.cards?.yellow?.home || 0} - ${
+            stats?.cards?.yellow?.away || 0
+          }`}
+          icon={AlertCircle}
+        />
+        <StatItem
+          label='Total Attacks'
+          value={`${coreMetrics.attacks.home} - ${coreMetrics.attacks.away}`}
+          icon={Shield}
+        />
+        <StatItem
+          label='Possession'
+          value={`${coreMetrics.possession.home}% - ${coreMetrics.possession.away}%`}
+          icon={Circle}
+        />
+      </div>
+    ),
+    [stats, coreMetrics]
+  );
+
+  // Memoized tab content
+  const TabContent = useMemo(
+    () => ({
+      stats: (
+        <div className='space-y-4'>
+          <StatComparison
+            label='Possession'
+            home={coreMetrics.possession.home}
+            away={coreMetrics.possession.away}
+            total={coreMetrics.possession.total || 100}
+          />
+          <StatComparison
+            label='Total Attacks'
+            home={coreMetrics.attacks.home}
+            away={coreMetrics.attacks.away}
+            total={coreMetrics.attacks.total || 1}
+          />
+          <StatComparison
+            label='Dangerous Attacks'
+            home={coreMetrics.dangerous.home}
+            away={coreMetrics.dangerous.away}
+            total={coreMetrics.dangerous.total || 1}
+          />
+        </div>
+      ),
+      momentum: momentum?.trend && (
+        <div className='bg-white rounded-xl border p-6'>
+          <div className='flex items-center gap-2 mb-4'>
+            <TrendingUp size={20} className='text-gray-600' />
+            <h4 className='font-semibold text-gray-900'>Match Momentum</h4>
+          </div>
+          <MomentumChart
+            data={trendData}
+            homeTeam={event.homeTeamName}
+            awayTeam={event.awayTeamName}
+          />
+        </div>
+      ),
+      timeline: (
+        <div className='bg-white rounded-xl border p-6'>
+          <div className='flex items-center gap-2 mb-4'>
+            <Activity size={20} className='text-gray-600' />
+            <h4 className='font-semibold text-gray-900'>Match Timeline</h4>
+          </div>
+          <ScrollArea className='h-[400px]'>
+            <div className='pr-4'>
+              {momentum?.timeline?.events.map((event, index) => (
+                <TimelineEvent key={`timeline-${index}`} event={event} />
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      ),
+      analysis: (
+        <div className='grid md:grid-cols-2 gap-6'>
+          <div className='space-y-4'>
+            <div className='grid grid-cols-2 gap-4'>
+              <div className='bg-blue-50 rounded-xl p-4'>
+                <div className='text-sm text-blue-600 mb-1'>
+                  Home Goal Probability
+                </div>
+                <div className='text-2xl font-bold text-blue-700'>
+                  {analysis?.goalProbability?.home?.toFixed(1)}%
+                </div>
               </div>
-              <div className='flex items-center gap-2 px-4 py-1.5 bg-white rounded-full shadow-sm border border-gray-200'>
-                <Clock size={14} className='text-gray-500' />
-                <span className='text-sm font-medium text-gray-700'>
-                  {event.playedSeconds || '0'}'
-                </span>
-              </div>
-              <div className='mt-3 px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-sm font-medium'>
-                {event.matchStatus?.name}
+              <div className='bg-red-50 rounded-xl p-4'>
+                <div className='text-sm text-red-600 mb-1'>
+                  Away Goal Probability
+                </div>
+                <div className='text-2xl font-bold text-red-700'>
+                  {analysis?.goalProbability?.away?.toFixed(1)}%
+                </div>
               </div>
             </div>
+          </div>
 
-            <div className='flex-1 space-y-2'>
-              <h3 className='text-3xl font-bold text-gray-900'>
-                {event.awayTeamName}
-              </h3>
-              <span className='text-sm text-gray-500'>Away</span>
+          <div className='bg-white rounded-xl border p-6'>
+            <h4 className='font-semibold text-gray-900 mb-4'>Match Analysis</h4>
+            <div className='space-y-4'>
+              <div className='font-medium text-gray-900'>
+                {analysis?.recommendation?.type}
+              </div>
+              <div className='text-sm text-gray-600'>
+                Confidence: {analysis?.recommendation?.confidence}/10
+              </div>
+              <div className='space-y-2'>
+                {analysis?.recommendation?.reasons?.map((reason, index) => (
+                  <div
+                    key={`reason-${index}`}
+                    className='flex items-start gap-2 text-sm text-gray-600'
+                  >
+                    <span>•</span>
+                    <span>{reason}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
-
-        <CardContent className='p-6'>
-          {/* Quick Stats Grid */}
-          <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8'>
-            <StatItem
-              label='Shots on Target'
-              value={`${stats?.shots?.onTarget?.home || 0} - ${
-                stats?.shots?.onTarget?.away || 0
-              }`}
-              icon={Target}
-            />
-            <StatItem
-              label='Shots off Target'
-              value={`${stats?.shots?.offTarget?.home || 0} - ${
-                stats?.shots?.offTarget?.away || 0
-              }`}
-              icon={Target}
-            />
-            <StatItem
-              label='Corner Kicks'
-              value={`${stats?.corners?.home || 0} - ${
-                stats?.corners?.away || 0
-              }`}
-              icon={Flag}
-            />
-            <StatItem
-              label='Yellow Cards'
-              value={`${stats?.cards?.yellow?.home || 0} - ${
-                stats?.cards?.yellow?.away || 0
-              }`}
-              icon={AlertCircle}
-            />
-            <StatItem
-              label='Total Attacks'
-              value={`${coreMetrics.attacks.home} - ${coreMetrics.attacks.away}`}
-              icon={Shield}
-            />
-            <StatItem
-              label='Possession'
-              value={`${coreMetrics.possession.home}% - ${coreMetrics.possession.away}%`}
-              icon={Circle}
-            />
+      ),
+      details: (
+        <div className='space-y-8'>
+          <div className='space-y-4'>
+            <div className='flex items-center gap-2'>
+              <Activity size={20} className='text-gray-600' />
+              <h3 className='font-semibold text-gray-900'>Match Details</h3>
+            </div>
+            <DetailStats details={event.enrichedData?.details} />
           </div>
 
-          {/* Tabbed Content */}
-          <Tabs defaultValue='stats' className='w-full'>
-            <TabsList className='mb-6'>
+          <div className='space-y-4'>
+            <div className='flex items-center gap-2'>
+              <TrendingUp size={20} className='text-gray-600' />
+              <h3 className='font-semibold text-gray-900'>
+                Situation Analysis
+              </h3>
+            </div>
+            <SituationTimeline
+              situations={event.enrichedData?.situation?.data}
+            />
+          </div>
+        </div>
+      ),
+      prediction: (
+        <div className='space-y-8'>
+          <div className='space-y-4'>
+            <div className='flex items-center gap-2'>
+              <Activity size={20} className='text-gray-600' />
+              <h3 className='font-semibold text-gray-900'>Match Prediction</h3>
+            </div>
+            <PredictionTab
+              details={details}
+              h2h={h2h}
+              form={form}
+              homeGoals={homeGoals}
+              awayGoals={awayGoals}
+            />
+          </div>
+        </div>
+      ),
+    }),
+    [
+      coreMetrics,
+      momentum,
+      trendData,
+      event.homeTeamName,
+      event.awayTeamName,
+      analysis,
+      event.enrichedData,
+    ]
+  );
+
+  return (
+    <div className='w-full max-w-[1920px] mx-auto p-4'>
+      <Card
+        className='bg-white shadow-xl rounded-2xl overflow-hidden'
+        ref={cardRef}
+      >
+        {HeaderSection}
+
+        <CardContent className='p-6'>
+          {StatisticsSection}
+
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className='w-full'
+          >
+            <TabsList className='mb-6 sticky top-[72px] bg-white/80 backdrop-blur-sm z-40'>
               <TabsTrigger value='stats'>Match Stats</TabsTrigger>
               <TabsTrigger value='momentum'>Momentum</TabsTrigger>
               <TabsTrigger value='timeline'>Timeline</TabsTrigger>
@@ -714,168 +947,21 @@ const MatchCard = ({ event }) => {
               <TabsTrigger value='prediction'>Prediction</TabsTrigger>
             </TabsList>
 
-            <TabsContent value='details'>
-              <div className='space-y-8'>
-                <div className='space-y-4'>
-                  <div className='flex items-center gap-2'>
-                    <Activity size={20} className='text-gray-600' />
-                    <h3 className='font-semibold text-gray-900'>
-                      Match Details
-                    </h3>
+            <div className='transition-all duration-300 min-h-[400px]'>
+              {Object.entries(TabContent).map(([key, content]) => (
+                <TabsContent key={key} value={key} forceMount>
+                  <div className={activeTab === key ? 'block' : 'hidden'}>
+                    {content}
                   </div>
-                  <DetailStats details={event.enrichedData?.details} />
-                </div>
-
-                <div className='space-y-4'>
-                  <div className='flex items-center gap-2'>
-                    <TrendingUp size={20} className='text-gray-600' />
-                    <h3 className='font-semibold text-gray-900'>
-                      Situation Analysis
-                    </h3>
-                  </div>
-                  <SituationTimeline
-                    situations={event.enrichedData?.situation?.data}
-                  />
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value='prediction'>
-              <div className='space-y-8'>
-                <div className='space-y-4'>
-                  <div className='flex items-center gap-2'>
-                    <Activity size={20} className='text-gray-600' />
-                    <h3 className='font-semibold text-gray-900'>
-                      Match Prediction
-                    </h3>
-                  </div>
-                  <PredictionTab
-                    details={event.enrichedData?.details}
-                    h2h={event.enrichedData?.h2h}
-                    form={event.enrichedData?.form}
-                    currentScore={event.setScore}
-                  />
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value='stats'>
-              <div className='space-y-4'>
-                <StatComparison
-                  label='Possession'
-                  home={coreMetrics.possession.home}
-                  away={coreMetrics.possession.away}
-                  total={coreMetrics.possession.total || 100}
-                />
-                <StatComparison
-                  label='Total Attacks'
-                  home={coreMetrics.attacks.home}
-                  away={coreMetrics.attacks.away}
-                  total={coreMetrics.attacks.total || 1}
-                />
-                <StatComparison
-                  label='Dangerous Attacks'
-                  home={coreMetrics.dangerous.home}
-                  away={coreMetrics.dangerous.away}
-                  total={coreMetrics.dangerous.total || 1}
-                />
-              </div>
-            </TabsContent>
-
-            <TabsContent value='momentum'>
-              {momentum?.trend && (
-                <div className='bg-white rounded-xl border p-6'>
-                  <div className='flex items-center gap-2 mb-4'>
-                    <TrendingUp size={20} className='text-gray-600' />
-                    <h4 className='font-semibold text-gray-900'>
-                      Match Momentum
-                    </h4>
-                  </div>
-                  <MomentumChart
-                    data={trendData}
-                    homeTeam={event.homeTeamName}
-                    awayTeam={event.awayTeamName}
-                  />
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value='timeline'>
-              <div className='bg-white rounded-xl border p-6'>
-                <div className='flex items-center gap-2 mb-4'>
-                  <Activity size={20} className='text-gray-600' />
-                  <h4 className='font-semibold text-gray-900'>
-                    Match Timeline
-                  </h4>
-                </div>
-                <ScrollArea className='h-[400px]'>
-                  <div className='pr-4'>
-                    {momentum?.timeline?.events.map((event, index) => (
-                      <TimelineEvent key={index} event={event} />
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            </TabsContent>
-
-            <TabsContent value='analysis'>
-              <div className='grid md:grid-cols-2 gap-6'>
-                <div className='space-y-4'>
-                  <div className='grid grid-cols-2 gap-4'>
-                    <div className='bg-blue-50 rounded-xl p-4'>
-                      <div className='text-sm text-blue-600 mb-1'>
-                        Home Goal Probability
-                      </div>
-                      <div className='text-2xl font-bold text-blue-700'>
-                        {analysis?.goalProbability?.home?.toFixed(1)}%
-                      </div>
-                    </div>
-                    <div className='bg-red-50 rounded-xl p-4'>
-                      <div className='text-sm text-red-600 mb-1'>
-                        Away Goal Probability
-                      </div>
-                      <div className='text-2xl font-bold text-red-700'>
-                        {analysis?.goalProbability?.away?.toFixed(1)}%
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className='bg-white rounded-xl border p-6'>
-                  <h4 className='font-semibold text-gray-900 mb-4'>
-                    Match Analysis
-                  </h4>
-                  <div className='space-y-4'>
-                    <div className='font-medium text-gray-900'>
-                      {analysis?.recommendation?.type}
-                    </div>
-                    <div className='text-sm text-gray-600'>
-                      Confidence: {analysis?.recommendation?.confidence}/10
-                    </div>
-                    <div className='space-y-2'>
-                      {analysis?.recommendation?.reasons?.map(
-                        (reason, index) => (
-                          <div
-                            key={index}
-                            className='flex items-start gap-2 text-sm text-gray-600'
-                          >
-                            <span>•</span>
-                            <span>{reason}</span>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
+                </TabsContent>
+              ))}
+            </div>
           </Tabs>
 
-          {/* Expand/Collapse Button */}
           <div className='mt-8'>
             <Button
               variant='ghost'
-              className='w-full'
+              className='w-full transition-colors duration-300'
               onClick={() => setExpanded(!expanded)}
             >
               {expanded ? (
@@ -892,9 +978,8 @@ const MatchCard = ({ event }) => {
             </Button>
           </div>
 
-          {/* Expanded Content */}
           {expanded && (
-            <div className='mt-6 space-y-8'>
+            <div className='mt-6 space-y-8 transition-all duration-500'>
               {/* H2H Information */}
               {h2h && (
                 <div className='space-y-6'>
@@ -913,7 +998,7 @@ const MatchCard = ({ event }) => {
                         <div className='space-y-3 pr-4'>
                           {h2h.matches?.map((match, idx) => (
                             <div
-                              key={idx}
+                              key={`h2h-${idx}`}
                               className='flex items-center justify-between py-2 border-b border-gray-100 last:border-0'
                             >
                               <div className='text-sm text-gray-500'>
@@ -931,7 +1016,7 @@ const MatchCard = ({ event }) => {
                     </div>
                     <div className='space-y-6'>
                       {[form.home, form.away].map((team, idx) => (
-                        <CurrentForm key={idx} team={team} />
+                        <CurrentForm key={`form-${idx}`} team={team} />
                       ))}
                     </div>
                   </div>
@@ -954,7 +1039,10 @@ const MatchCard = ({ event }) => {
                     {event.markets
                       .filter((market) => market.status === 0)
                       .map((market, index) => (
-                        <MarketOddsCard key={index} market={market} />
+                        <MarketOddsCard
+                          key={`market-${index}`}
+                          market={market}
+                        />
                       ))}
                   </div>
                 </div>
@@ -967,4 +1055,43 @@ const MatchCard = ({ event }) => {
   );
 };
 
-export default MatchCard;
+// Optimized equality check function for enrichedData
+const isEnrichedDataEqual = (prev, next) => {
+  if (!prev || !next) return prev === next;
+
+  // Only compare specific fields that affect the UI
+  const fieldsToCompare = [
+    'analysis.stats',
+    'analysis.momentum',
+    'analysis.goalProbability',
+    'analysis.recommendation',
+    'details',
+    'situation.data',
+    'h2h.matches',
+    'form',
+  ];
+
+  return fieldsToCompare.every((path) => {
+    const prevValue = path.split('.').reduce((obj, key) => obj?.[key], prev);
+    const nextValue = path.split('.').reduce((obj, key) => obj?.[key], next);
+    return JSON.stringify(prevValue) === JSON.stringify(nextValue);
+  });
+};
+
+// Enhanced memo comparison function
+const arePropsEqual = (prevProps, nextProps) => {
+  const essentialChecks = [
+    prevProps.event.setScore === nextProps.event.setScore,
+    prevProps.event.playedSeconds === nextProps.event.playedSeconds,
+    prevProps.event.matchStatus?.name === nextProps.event.matchStatus?.name,
+    isEnrichedDataEqual(
+      prevProps.event.enrichedData,
+      nextProps.event.enrichedData
+    ),
+  ];
+
+  return essentialChecks.every(Boolean);
+};
+
+// Export memoized component with optimized comparison
+export default React.memo(MatchCard, arePropsEqual);
