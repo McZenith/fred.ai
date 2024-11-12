@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { TrendingUp, Activity, Goal, ChevronUp } from 'lucide-react';
+import { TrendingUp, Activity, Goal, ChevronUp, Percent } from 'lucide-react';
 import PropTypes from 'prop-types';
 
 const PredictionTab = ({
@@ -163,6 +163,7 @@ const PredictionTab = ({
         homeStats.recentform = 50;
         awayStats.recentform = 50;
       }
+
       // Process H2H data
       if (h2h) {
         const { home: homePercent, away: awayPercent } = calculatePercentage(
@@ -223,6 +224,39 @@ const PredictionTab = ({
   useEffect(() => {
     setPredictions(calculatePredictions);
   }, [calculatePredictions]);
+
+  // Calculate total comparison across all metrics
+  const calculateTotalComparison = (stats) => {
+    const homeTotal = Object.entries(stats.home)
+      .filter(
+        ([key, value]) =>
+          key !== 'momentum' &&
+          key !== 'advantageCount' &&
+          typeof value === 'number'
+      )
+      .reduce((sum, [_, value]) => sum + value, 0);
+
+    const awayTotal = Object.entries(stats.away)
+      .filter(
+        ([key, value]) =>
+          key !== 'momentum' &&
+          key !== 'advantageCount' &&
+          typeof value === 'number'
+      )
+      .reduce((sum, [_, value]) => sum + value, 0);
+
+    const totalMetrics = Object.keys(stats.home).filter(
+      (key) =>
+        key !== 'momentum' &&
+        key !== 'advantageCount' &&
+        typeof stats.home[key] === 'number'
+    ).length;
+
+    return {
+      home: (homeTotal / (totalMetrics * 100)) * 100,
+      away: (awayTotal / (totalMetrics * 100)) * 100,
+    };
+  };
 
   // Stat formatting helper
   const formatStatLabel = (key) => {
@@ -297,6 +331,8 @@ const PredictionTab = ({
         typeof stats[key] === 'number'
     ).length;
 
+    const totalComparison = calculateTotalComparison(predictions.stats);
+
     return (
       <div
         className={`bg-${side === 'home' ? 'blue' : 'red'}-50 rounded-lg p-6`}
@@ -307,6 +343,24 @@ const PredictionTab = ({
           </h3>
           <div className='text-3xl font-bold text-blue-600'>
             {predictions.stats[side].goals.toFixed(1)}%
+          </div>
+        </div>
+
+        {/* Overall Comparison */}
+        <div className='mb-4 p-3 bg-white rounded-lg shadow-sm'>
+          <h4 className='text-sm font-medium text-gray-700 mb-2'>
+            Overall Comparison
+          </h4>
+          <div className='flex items-center justify-between'>
+            <div className='flex items-center'>
+              <Percent className='mr-2 text-blue-600' size={20} />
+              <span className='text-2xl font-bold text-blue-600'>
+                {totalComparison[side].toFixed(1)}%
+              </span>
+            </div>
+            <span className='text-sm text-gray-600'>
+              Average across all metrics
+            </span>
           </div>
         </div>
 
