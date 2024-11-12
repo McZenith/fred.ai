@@ -75,23 +75,4 @@ export const GET = async (request) => {
   }
 };
 
-// Error logging with rate limiting
-const errorLogs = new Map();
-const ERROR_LOG_LIMIT = 5; // Max errors per minute per endpoint
-
-const logError = (endpoint, error, id) => {
-  const now = Date.now();
-  const key = `${endpoint}-${Math.floor(now / 60000)}`; // Key by minute
-
-  const currentCount = errorLogs.get(key) || 0;
-  if (currentCount < ERROR_LOG_LIMIT) {
-    console.error(`${endpoint} API Error:`, {
-      id,
-      error: error.message,
-      timestamp: new Date(now).toISOString(),
-    });
-    errorLogs.set(key, currentCount + 1);
-  }
-};
-
 export const revalidate = 0;

@@ -121,25 +121,6 @@ export const parseScore = (scoreString) => {
   return scores.reduce((sum, score) => sum + (isNaN(score) ? 0 : score), 0);
 };
 
-// Debug utilities
-export const debug = {
-  logMatchDetails: (event) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.group(
-        `Match Details: ${event.homeTeamName} vs ${event.awayTeamName}`
-      );
-      console.log({
-        period: event.period,
-        normalizedPeriod: normalizeMatchPeriod(event.period),
-        status: event.matchStatus,
-        playedTime: event.playedSeconds,
-        detectedHalf: getMatchHalf(event),
-      });
-      console.groupEnd();
-    }
-  },
-};
-
 // Helper function to process match data
 export const processMatchData = (event) => {
   const {

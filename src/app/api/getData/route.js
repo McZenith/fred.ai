@@ -41,7 +41,6 @@ export const GET = async () => {
       },
     });
   } catch (error) {
-    console.error('Error in GET handler:', error);
     return NextResponse.json(
       {
         message: 'Error fetching data',

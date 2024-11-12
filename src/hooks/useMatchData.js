@@ -55,7 +55,6 @@ export const useMatchData = () => {
       const result = await response.json();
 
       if (!result || !result.data) {
-        console.error('Invalid data structure received:', result);
         setError(new Error('Invalid data received from server'));
         return;
       }
@@ -110,7 +109,18 @@ export const useMatchData = () => {
                 !match.ai &&
                 !match.tournamentName?.toLowerCase().includes('srl') &&
                 !match.homeTeamName?.toLowerCase().includes('srl') &&
-                !match.awayTeamName?.toLowerCase().includes('srl')
+                !match.awayTeamName?.toLowerCase().includes('srl') &&
+                match.tournamentName &&
+                match.enrichedData?.h2h &&
+                match.enrichedData?.form &&
+                match.enrichedData?.tournament &&
+                match.enrichedData?.details &&
+                match.enrichedData?.phrases &&
+                match.enrichedData?.situation &&
+                match.enrichedData?.timeline &&
+                match.enrichedData?.matchInfo &&
+                match.enrichedData?.odds &&
+                match.enrichedData?.squads
             )
           );
         }
@@ -148,7 +158,18 @@ export const useMatchData = () => {
               !match.ai &&
               !match.tournamentName?.toLowerCase().includes('srl') &&
               !match.homeTeamName?.toLowerCase().includes('srl') &&
-              !match.awayTeamName?.toLowerCase().includes('srl')
+              !match.awayTeamName?.toLowerCase().includes('srl') &&
+              match.tournamentName &&
+              match.enrichedData?.h2h &&
+              match.enrichedData?.form &&
+              match.enrichedData?.tournament &&
+              match.enrichedData?.details &&
+              match.enrichedData?.phrases &&
+              match.enrichedData?.situation &&
+              match.enrichedData?.timeline &&
+              match.enrichedData?.matchInfo &&
+              match.enrichedData?.odds &&
+              match.enrichedData?.squads
           );
 
           // Only update if data has actually changed and updates aren't paused
@@ -163,7 +184,6 @@ export const useMatchData = () => {
         });
       }
     } catch (error) {
-      console.error('Error fetching live data:', error);
       setError(error);
     } finally {
       setIsLoading(false);
@@ -180,7 +200,6 @@ export const useMatchData = () => {
       const result = await response.json();
 
       if (!result?.data) {
-        console.error('Invalid upcoming data structure received:', result);
         setError(new Error('Invalid upcoming data received from server'));
         setUpcomingData([]);
         return;
@@ -234,7 +253,6 @@ export const useMatchData = () => {
         return newData;
       });
     } catch (error) {
-      console.error('Error fetching upcoming data:', error);
       setError(error);
       setUpcomingData([]);
     } finally {
@@ -265,7 +283,6 @@ export const useMatchData = () => {
       try {
         await Promise.all([fetchAndEnrichLiveData(), fetchUpcomingData()]);
       } catch (error) {
-        console.error('Error during initialization:', error);
         setError(error);
       }
     };

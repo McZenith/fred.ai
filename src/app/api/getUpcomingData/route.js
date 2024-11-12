@@ -21,7 +21,6 @@ export const GET = async () => {
     const responses = await Promise.all(
       Array.from({ length: pageLimit }, (_, i) =>
         axios.get(createUrl(i + 1), { headers }).catch((err) => {
-          console.error(`Failed to fetch page ${i + 1}:`, err.message);
           return { data: { data: { tournaments: [] } } }; // Fallback data
         })
       )
@@ -42,7 +41,6 @@ export const GET = async () => {
       },
     });
   } catch (error) {
-    console.error('Error in GET handler:', error);
     return NextResponse.json(
       { message: 'Internal server error', error: error.message },
       { status: 500 }

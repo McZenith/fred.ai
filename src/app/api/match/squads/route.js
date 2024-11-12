@@ -52,16 +52,6 @@ export const GET = async (request) => {
   } catch (error) {
     const errorResponse = handleError(error);
 
-    // Enhanced error logging in production
-    if (process.env.NODE_ENV === 'production') {
-      console.error('Match Squads API Error:', {
-        matchId: searchParams?.get('matchId'),
-        error: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     return new NextResponse(JSON.stringify(errorResponse), {
       status: errorResponse.code,
       headers: {

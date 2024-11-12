@@ -547,7 +547,7 @@ const MatchCard = ({ event }) => {
   const [expanded, setExpanded] = useState(false);
   const [prevEvent, setPrevEvent] = useState(event);
   const { addToCart, removeFromCart, isInCart } = useCart();
-  const [activeTab, setActiveTab] = useState('stats');
+  const [activeTab, setActiveTab] = useState('prediction');
 
   // Memoize core data calculations
   const {
@@ -623,8 +623,23 @@ const MatchCard = ({ event }) => {
     }
   }, [event.eventId, isInCart, addToCart, removeFromCart]);
 
-  const details = event.enrichedData?.details;
-  let [homeGoals, awayGoals] = event.setScore.split(':').map(Number);
+  let details = event.enrichedData?.details;
+  let [homeGoals, awayGoals] = event.setScore
+    ? event.setScore.split(':').map(Number)
+    : [0, 0];
+
+  // Arrow function to retrieve stat values
+  const getValue = (statName) => (team) => (eventData) => {
+    const value = parseInt(
+      eventData.enrichedData?.details?.values?.['110']?.value?.[team]
+    );
+    return isNaN(value) ? null : value;
+  };
+
+  // Ball possession
+  const homePossession = getValue('Ball possession')('home')(event) ?? 50;
+  const awayPossession = getValue('Ball possession')('away')(event) ?? 50;
+
   // Handle smooth score transitions
   useEffect(() => {
     if (prevScore !== event.setScore) {
@@ -762,7 +777,7 @@ const MatchCard = ({ event }) => {
         />
         <StatItem
           label='Possession'
-          value={`${coreMetrics.possession.home}% - ${coreMetrics.possession.away}%`}
+          value={`${homePossession}% - ${awayPossession}%`}
           icon={Circle}
         />
       </div>
@@ -777,9 +792,9 @@ const MatchCard = ({ event }) => {
         <div className='space-y-4'>
           <StatComparison
             label='Possession'
-            home={coreMetrics.possession.home}
-            away={coreMetrics.possession.away}
-            total={coreMetrics.possession.total || 100}
+            home={homePossession}
+            away={awayPossession}
+            total={100}
           />
           <StatComparison
             label='Total Attacks'
@@ -903,7 +918,7 @@ const MatchCard = ({ event }) => {
             <PredictionTab
               details={details}
               h2h={h2h}
-              form={form}
+              form={event?.enrichedData?.form}
               homeGoals={homeGoals}
               awayGoals={awayGoals}
             />
@@ -939,12 +954,12 @@ const MatchCard = ({ event }) => {
             className='w-full'
           >
             <TabsList className='mb-6 sticky top-[72px] bg-white/80 backdrop-blur-sm z-40'>
+              <TabsTrigger value='prediction'>Prediction</TabsTrigger>
               <TabsTrigger value='stats'>Match Stats</TabsTrigger>
               <TabsTrigger value='momentum'>Momentum</TabsTrigger>
               <TabsTrigger value='timeline'>Timeline</TabsTrigger>
               <TabsTrigger value='analysis'>Analysis</TabsTrigger>
               <TabsTrigger value='details'>Details</TabsTrigger>
-              <TabsTrigger value='prediction'>Prediction</TabsTrigger>
             </TabsList>
 
             <div className='transition-all duration-300 min-h-[400px]'>

@@ -52,15 +52,6 @@ export const GET = async (request) => {
   } catch (error) {
     const errorResponse = handleError(error);
 
-    // Enhanced error logging
-    if (process.env.NODE_ENV === 'production') {
-      console.error('Match Timeline API Error:', {
-        matchId: searchParams?.get('matchId'),
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     return new NextResponse(JSON.stringify(errorResponse), {
       status: errorResponse.code,
       headers: {

@@ -91,15 +91,6 @@ export const GET = async (request) => {
   } catch (error) {
     const errorResponse = handleError(error);
 
-    // Log errors in production
-    if (process.env.NODE_ENV === 'production') {
-      console.error('Season Meta API Error:', {
-        requestId: searchParams?.get('matchId'),
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     return new NextResponse(JSON.stringify(errorResponse), {
       status: errorResponse.code,
       headers: {

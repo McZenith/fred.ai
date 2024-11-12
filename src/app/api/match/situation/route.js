@@ -68,16 +68,6 @@ export const GET = async (request) => {
   } catch (error) {
     const errorResponse = handleError(error);
 
-    // Log errors in production
-    if (process.env.NODE_ENV === 'production') {
-      console.error('Match Situation API Error:', {
-        matchId: searchParams?.get('matchId'),
-        error: error.message,
-        stack: error.stack,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     return new NextResponse(JSON.stringify(errorResponse), {
       status: errorResponse.code,
       headers: {

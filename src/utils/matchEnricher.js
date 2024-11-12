@@ -11,7 +11,6 @@ const fetchEndpoint = async (route, params = {}) => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error(`Error fetching ${route}:`, error);
     return null;
   }
 };
@@ -139,7 +138,7 @@ const calculateGoalProbability = (momentum, stats) => {
     const momentumScore = momentum.recent[team] * 0.3;
     const attackScore = (stats.attacks[team] / 2) * 0.2;
     const dangerousScore = stats.dangerous[team] * 0.25;
-    const possessionScore = (stats.possession[team] / 2) * 0.15;
+    const possessionScore = stats.possession[team] * 0.15;
     const shotsScore =
       ((stats.shots.onTarget[team] * 2 + stats.shots.offTarget[team]) / 3) *
       0.1;
@@ -302,7 +301,6 @@ export const enrichMatch = {
         },
       };
     } catch (error) {
-      console.error('Error in match enrichment:', error);
       return match;
     }
   },

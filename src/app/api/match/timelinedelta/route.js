@@ -95,16 +95,6 @@ const ERROR_LOG_LIMIT = 10; // Max errors per minute per matchId
 const logError = (error, matchId) => {
   const now = Date.now();
   const key = `${matchId}-${Math.floor(now / 60000)}`; // Key by minute
-
-  const currentCount = errorLogs.get(key) || 0;
-  if (currentCount < ERROR_LOG_LIMIT) {
-    console.error('Timeline Delta API Error:', {
-      matchId,
-      error: error.message,
-      timestamp: new Date(now).toISOString(),
-    });
-    errorLogs.set(key, currentCount + 1);
-  }
 };
 
 export const revalidate = 0;

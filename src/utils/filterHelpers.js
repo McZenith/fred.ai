@@ -20,14 +20,9 @@ export const filterPredicates = {
   },
 
   highProbability: (event) => {
-    const analysis = event.enrichedData?.analysis;
+    const analysis = event.enrichedData?.details.values;
     if (!analysis) return false;
-
-    const homeProb = analysis.goalProbability?.home || 0;
-    const awayProb = analysis.goalProbability?.away || 0;
-    const confidence = analysis.recommendation?.confidence || 0;
-
-    return homeProb > 65 || awayProb > 65 || confidence > 7;
+    return Object.keys(analysis).length > 10;
   },
 
   inCart: (event, isInCart) => {
@@ -79,16 +74,6 @@ export const applyFilters = (data, activeFilters, searchTerm, isInCart) => {
     });
   }
 
-  // Log all match statuses for debugging
-  console.log(
-    'All Match Statuses:',
-    filteredData.map((event) => ({
-      eventId: event.eventId,
-      status: event.matchStatus?.name,
-      fullStatus: event.matchStatus,
-    }))
-  );
-
   // Apply active filters
   filteredData = filteredData.filter((event) => {
     return activeFilters.every((filter) => {
@@ -103,17 +88,9 @@ export const applyFilters = (data, activeFilters, searchTerm, isInCart) => {
           const result =
             filter === 'inCart' ? predicate(event, isInCart) : predicate(event);
 
-          // Log filter results
-          console.log('Filter result:', {
-            filter,
-            eventId: event.eventId,
-            matchStatus: event.matchStatus?.name,
-            result,
-          });
-
+    
           return result;
         } catch (error) {
-          console.error(`Error applying filter ${filter}:`, error);
           return true;
         }
       }
