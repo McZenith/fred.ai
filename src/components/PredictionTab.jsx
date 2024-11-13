@@ -1,5 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { TrendingUp, Activity, Goal, ChevronUp, Percent } from 'lucide-react';
+import {
+  TrendingUp,
+  Activity,
+  Goal,
+  ChevronUp,
+  Percent,
+  Clock,
+} from 'lucide-react';
 import PropTypes from 'prop-types';
 
 const PredictionTab = ({
@@ -8,6 +15,9 @@ const PredictionTab = ({
   form,
   homeGoals = 0,
   awayGoals = 0,
+  events = [],
+  homeTeam,
+  awayTeam,
 }) => {
   // Initial state with more comprehensive stats structure
   const [predictions, setPredictions] = useState({
@@ -26,6 +36,56 @@ const PredictionTab = ({
       },
     },
   });
+
+  // Helper to format game time with period indication
+  const formatGameTime = (minutes, injuryTime, periodNumber = 1) => {
+    const period = minutes <= 45 ? '1H' : '2H';
+    const adjustedMinutes = minutes > 45 ? minutes - 45 : minutes;
+
+    if (injuryTime) {
+      return `${period} ${adjustedMinutes}+${injuryTime}'`;
+    }
+    return `${period} ${adjustedMinutes}'`;
+  };
+
+  // Process timeline from events
+  const processedTimeline = useMemo(() => {
+    const homeGoals = [];
+    const awayGoals = [];
+
+    // Filter goals from events array
+    const goals = events
+      .filter((event) => event.type === 'goal')
+      .map((goal) => ({
+        time: goal.time,
+        injurytime: goal.injurytime,
+        team: goal.team,
+        penalty: goal.penalty || false,
+        owngoal: goal.owngoal || false,
+        period: goal.time <= 45 ? 1 : 2,
+      }));
+
+    goals.forEach((goal) => {
+      const timeDisplay = formatGameTime(
+        goal.time,
+        goal.injurytime,
+        goal.period
+      );
+      const goalInfo = {
+        time: timeDisplay,
+        penalty: goal.penalty,
+        ownGoal: goal.owngoal,
+      };
+
+      if (goal.team === 'home') {
+        homeGoals.push(goalInfo);
+      } else {
+        awayGoals.push(goalInfo);
+      }
+    });
+
+    return { homeGoals, awayGoals };
+  }, [events]);
 
   // Helper to parse potentially problematic values
   const parseValue = (value) => {
@@ -112,7 +172,6 @@ const PredictionTab = ({
             }
 
             // Adjust prediction score
-            // For negative stats (cards, fouls), higher percentage is worse
             if (weight < 0) {
               homeScore += (50 - homePercent) * Math.abs(weight);
             } else {
@@ -258,7 +317,6 @@ const PredictionTab = ({
     };
   };
 
-  // Stat formatting helper
   const formatStatLabel = (key) => {
     const labels = {
       goals: 'Goals',
@@ -293,7 +351,7 @@ const PredictionTab = ({
     );
   };
 
-  let renderStat = (key, value, isWinning) => {
+  const renderStat = (key, value, isWinning) => {
     if (value === undefined || key === 'momentum' || key === 'advantageCount')
       return null;
     if (typeof value !== 'number') return null;
@@ -320,11 +378,11 @@ const PredictionTab = ({
     );
   };
 
-  let renderTeamStats = (side) => {
-    let stats = predictions.stats[side];
-    let otherSide = side === 'home' ? 'away' : 'home';
-    let otherStats = predictions.stats[otherSide];
-    let totalStats = Object.keys(stats).filter(
+  const renderTeamStats = (side) => {
+    const stats = predictions.stats[side];
+    const otherSide = side === 'home' ? 'away' : 'home';
+    const otherStats = predictions.stats[otherSide];
+    const totalStats = Object.keys(stats).filter(
       (key) =>
         key !== 'momentum' &&
         key !== 'advantageCount' &&
@@ -332,29 +390,35 @@ const PredictionTab = ({
     ).length;
 
     const totalComparison = calculateTotalComparison(predictions.stats);
+    const teamColor = side === 'home' ? 'blue' : 'red';
+    const teamName = side === 'home' ? homeTeam?.name : awayTeam?.name;
 
     return (
-      <div
-        className={`bg-${side === 'home' ? 'blue' : 'red'}-50 rounded-lg p-6`}
-      >
+      <div className={`bg-${teamColor}-50 rounded-lg p-6`}>
         <div className='flex justify-between items-center mb-4'>
-          <h3 className='text-lg font-semibold text-gray-900'>
-            {side === 'home' ? 'Home' : 'Away'} Team
-          </h3>
+          <div>
+            <h3 className='text-lg font-semibold text-gray-900'>
+              {teamName || `${side === 'home' ? 'Home' : 'Away'} Team`}
+            </h3>
+            {teamName && (
+              <span className='text-sm text-gray-500'>
+                {side === 'home' ? 'Home' : 'Away'}
+              </span>
+            )}
+          </div>
           <div className='text-3xl font-bold text-blue-600'>
             {predictions.stats[side].goals.toFixed(1)}%
           </div>
         </div>
 
-        {/* Overall Comparison */}
         <div className='mb-4 p-3 bg-white rounded-lg shadow-sm'>
           <h4 className='text-sm font-medium text-gray-700 mb-2'>
             Overall Comparison
           </h4>
           <div className='flex items-center justify-between'>
             <div className='flex items-center'>
-              <Percent className='mr-2 text-blue-600' size={20} />
-              <span className='text-2xl font-bold text-blue-600'>
+              <Percent className={`mr-2 text-${teamColor}-600`} size={20} />
+              <span className={`text-2xl font-bold text-${teamColor}-600`}>
                 {totalComparison[side].toFixed(1)}%
               </span>
             </div>
@@ -422,20 +486,71 @@ const PredictionTab = ({
     );
   };
 
+  // Get current match time from the last event
+  const getCurrentMatchTime = () => {
+    if (!events.length) return '';
+    const lastEvent = [...events].reverse().find((event) => event.time !== -1);
+    if (!lastEvent) return '';
+    return formatGameTime(lastEvent.time, lastEvent.injurytime);
+  };
+
   return (
     <div className='space-y-6'>
-      {/* Current Score */}
+      {/* Enhanced Score Card with Timeline */}
       <div className='bg-white rounded-lg shadow p-6'>
-        <h3 className='text-base font-semibold mb-4'>Current Score</h3>
-        <div className='flex justify-around items-center'>
-          <div className='text-center'>
+        <div className='flex justify-between items-center mb-4'>
+          <h3 className='text-base font-semibold'>Current Score</h3>
+          <span className='text-sm font-medium text-gray-500'>
+            {getCurrentMatchTime()}
+          </span>
+        </div>
+        <div className='flex justify-around items-center mb-4'>
+          <div className='text-center w-1/3'>
+            <div className='text-lg font-medium text-gray-600 mb-2'>
+              {homeTeam?.name || 'Home'}
+            </div>
             <div className='text-6xl font-bold text-blue-500'>{homeGoals}</div>
-            <div className='text-sm text-gray-600 mt-2'>Home</div>
+            <div className='mt-3 space-y-1'>
+              {processedTimeline.homeGoals.map((goal, index) => (
+                <div
+                  key={index}
+                  className='flex items-center justify-center text-sm text-gray-600'
+                >
+                  <Clock className='w-4 h-4 mr-1 text-blue-500' />
+                  {goal.time}
+                  {goal.penalty && (
+                    <span className='ml-1 text-amber-600'>(P)</span>
+                  )}
+                  {goal.ownGoal && (
+                    <span className='ml-1 text-red-600'>(OG)</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className='text-2xl text-gray-400'>-</div>
-          <div className='text-center'>
+          <div className='text-4xl font-bold text-gray-300'>VS</div>
+          <div className='text-center w-1/3'>
+            <div className='text-lg font-medium text-gray-600 mb-2'>
+              {awayTeam?.name || 'Away'}
+            </div>
             <div className='text-6xl font-bold text-red-500'>{awayGoals}</div>
-            <div className='text-sm text-gray-600 mt-2'>Away</div>
+            <div className='mt-3 space-y-1'>
+              {processedTimeline.awayGoals.map((goal, index) => (
+                <div
+                  key={index}
+                  className='flex items-center justify-center text-sm text-gray-600'
+                >
+                  <Clock className='w-4 h-4 mr-1 text-red-500' />
+                  {goal.time}
+                  {goal.penalty && (
+                    <span className='ml-1 text-amber-600'>(P)</span>
+                  )}
+                  {goal.ownGoal && (
+                    <span className='ml-1 text-red-600'>(OG)</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -524,6 +639,13 @@ PredictionTab.propTypes = {
   }),
   homeGoals: PropTypes.number,
   awayGoals: PropTypes.number,
+  events: PropTypes.arrayOf(PropTypes.object),
+  homeTeam: PropTypes.shape({
+    name: PropTypes.string,
+  }),
+  awayTeam: PropTypes.shape({
+    name: PropTypes.string,
+  }),
 };
 
 export default PredictionTab;

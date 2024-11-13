@@ -921,6 +921,9 @@ const MatchCard = ({ event }) => {
               form={event?.enrichedData?.form}
               homeGoals={homeGoals}
               awayGoals={awayGoals}
+              events={event?.enrichedData?.timeline?.complete?.events}
+              homeTeam={event.homeTeamName}
+              awayTeam={event.awayTeamName}
             />
           </div>
         </div>
