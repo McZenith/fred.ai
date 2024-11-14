@@ -208,7 +208,7 @@ const HomeContent = () => {
           ⚽ Fred.ai
         </h1>
 
-        {error && matches.length === 0 && <ErrorMessage error={error} />}
+        {error && filteredData.length === 0 && <ErrorMessage error={error} />}
 
         <HeaderControls
           activeTab={activeTab}
