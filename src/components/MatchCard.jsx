@@ -223,7 +223,7 @@ const DetailStats = React.memo(({ details }) => {
 
   return (
     <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-      {relevantStats.map(([key, stat]) => (
+      {relevantStats?.map(([key, stat]) => (
         <div
           key={key}
           className='bg-white p-4 rounded-xl shadow-sm border border-gray-100 transition-all duration-300 hover:shadow-md'
@@ -505,8 +505,8 @@ const MarketOddsCard = React.memo(({ market, children }) => {
 
         <div className='grid grid-cols-3 gap-3'>
           {market.outcomes
-            .filter((outcome) => outcome.isActive === 1)
-            .map((outcome, idx) => (
+            ?.filter((outcome) => outcome.isActive === 1)
+            ?.map((outcome, idx) => (
               <Button
                 key={`${outcome.id}-${idx}`}
                 variant='outline'
@@ -563,13 +563,13 @@ const MatchCard = ({ event }) => {
     const analysis = event?.enrichedData?.analysis;
     const stats = analysis?.stats;
     const momentum = analysis?.momentum;
-
     return {
       analysis,
       stats,
       momentum,
       h2h: event?.enrichedData?.h2h,
       form: event?.enrichedData?.form,
+      preMatchMarketData: event?.enrichedData?.preMatchMarketData,
       tournament: event?.enrichedData?.tournament,
       coreMetrics: {
         possession: {
@@ -625,7 +625,7 @@ const MatchCard = ({ event }) => {
 
   let details = event.enrichedData?.details;
   let [homeGoals, awayGoals] = event.setScore
-    ? event.setScore.split(':').map(Number)
+    ? event.setScore?.split(':')?.map(Number)
     : [0, 0];
 
   // Arrow function to retrieve stat values
@@ -831,7 +831,7 @@ const MatchCard = ({ event }) => {
           </div>
           <ScrollArea className='h-[400px]'>
             <div className='pr-4'>
-              {momentum?.timeline?.events.map((event, index) => (
+              {momentum?.timeline?.events?.map((event, index) => (
                 <TimelineEvent key={`timeline-${index}`} event={event} />
               ))}
             </div>
@@ -917,6 +917,8 @@ const MatchCard = ({ event }) => {
             </div>
             <PredictionTab
               details={details}
+              liveMarkets={event?.markets}
+              market={event}
               h2h={h2h}
               form={event?.enrichedData?.form}
               homeGoals={homeGoals}
@@ -924,6 +926,7 @@ const MatchCard = ({ event }) => {
               events={event?.enrichedData?.timeline?.complete?.events}
               homeTeam={event.homeTeamName}
               awayTeam={event.awayTeamName}
+              tournament={event.sport.category.tournament.name}
             />
           </div>
         </div>
@@ -966,7 +969,7 @@ const MatchCard = ({ event }) => {
             </TabsList>
 
             <div className='transition-all duration-300 min-h-[400px]'>
-              {Object.entries(TabContent).map(([key, content]) => (
+              {Object.entries(TabContent)?.map(([key, content]) => (
                 <TabsContent key={key} value={key} forceMount>
                   <div className={activeTab === key ? 'block' : 'hidden'}>
                     {content}
@@ -1033,7 +1036,7 @@ const MatchCard = ({ event }) => {
                       </ScrollArea>
                     </div>
                     <div className='space-y-6'>
-                      {[form.home, form.away].map((team, idx) => (
+                      {[form.home, form.away]?.map((team, idx) => (
                         <CurrentForm key={`form-${idx}`} team={team} />
                       ))}
                     </div>
@@ -1056,7 +1059,7 @@ const MatchCard = ({ event }) => {
                   <div className='grid md:grid-cols-2 gap-6'>
                     {event.markets
                       .filter((market) => market.status === 0)
-                      .map((market, index) => (
+                      ?.map((market, index) => (
                         <MarketOddsCard
                           key={`market-${index}`}
                           market={market}
@@ -1084,6 +1087,7 @@ const isEnrichedDataEqual = (prev, next) => {
     'analysis.goalProbability',
     'analysis.recommendation',
     'details',
+    'prematchMarketData',
     'situation.data',
     'h2h.matches',
     'form',

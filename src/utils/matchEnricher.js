@@ -269,6 +269,20 @@ export const enrichMatch = {
       const goalProbability = calculateGoalProbability(momentum, stats);
       const recommendation = generateRecommendation(stats, goalProbability);
 
+      const data = await import('@/utils/preMatchData.json');
+      const tournamentData = data.default?.data?.tournaments?.find(
+        (t) => t.id === tournamentId
+      );
+
+      const prematchData = tournamentData?.events?.find(
+        (event) =>
+          (event.homeTeamName === match.homeTeamName &&
+            event.awayTeamName === match.awayTeamName) ||
+          (event.homeTeamId === match.homeTeamId &&
+            event.awayTeamId === match.awayTeamId)
+      );
+      const market = prematchData?.markets?.find((m) => m.id === '1');
+
       return {
         ...match,
         enrichedData: {
@@ -291,6 +305,7 @@ export const enrichMatch = {
           situation: situation?.doc?.[0]?.data || situation?.doc || null,
           details: details?.doc?.[0]?.data || details?.doc || null,
           phrases: phrases?.doc?.[0]?.data || phrases?.doc || null,
+          prematchMarketData: market,
 
           analysis: {
             momentum,

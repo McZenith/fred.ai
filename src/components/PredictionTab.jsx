@@ -6,11 +6,140 @@ import {
   ChevronUp,
   Percent,
   Clock,
+  Scale,
+  ArrowDown,
+  ArrowUp,
+  Minus,
 } from 'lucide-react';
 import PropTypes from 'prop-types';
 
+// Utility Components
+const OddsComparison = ({
+  market,
+  tournament,
+  currentOdds,
+  homeTeam,
+  awayTeam,
+}) => {
+  const findPreMatchOdds = (market) => {
+    if (!market) return null;
+
+    return {
+      home: market.outcomes.find((o) => o.desc === 'Home')?.odds || '-',
+      draw: market.outcomes.find((o) => o.desc === 'Draw')?.odds || '-',
+      away: market.outcomes.find((o) => o.desc === 'Away')?.odds || '-',
+    };
+  };
+
+  const preMatchOdds = findPreMatchOdds(market);
+
+  const getOddsDifference = (current, previous) => {
+    if (!current || !previous || current === '-' || previous === '-')
+      return null;
+    return (
+      ((parseFloat(current) - parseFloat(previous)) / parseFloat(previous)) *
+      100
+    );
+  };
+
+  const renderOddChange = (current, previous) => {
+    const diff = getOddsDifference(current, previous);
+    if (diff === null) return <Minus className='w-4 h-4 text-gray-400' />;
+
+    if (diff > 0) {
+      return (
+        <div className='flex items-center text-green-600'>
+          <ArrowUp className='w-4 h-4' />
+          <span className='text-xs ml-1'>({diff.toFixed(1)}%)</span>
+        </div>
+      );
+    }
+
+    if (diff < 0) {
+      return (
+        <div className='flex items-center text-red-600'>
+          <ArrowDown className='w-4 h-4' />
+          <span className='text-xs ml-1'>({Math.abs(diff).toFixed(1)}%)</span>
+        </div>
+      );
+    }
+
+    return <Minus className='w-4 h-4 text-gray-400' />;
+  };
+
+  return (
+    <div className='grid grid-cols-3 gap-4 mb-6'>
+      <div className='p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200'>
+        <div className='text-sm font-medium text-blue-900 mb-2'>Home Win</div>
+        <div className='space-y-2'>
+          <div className='flex items-center justify-between'>
+            <span className='text-sm text-blue-700'>Pre-match</span>
+            <span className='font-semibold text-blue-900'>
+              {preMatchOdds?.home || '-'}
+            </span>
+          </div>
+          <div className='flex items-center justify-between'>
+            <span className='text-sm text-blue-700'>Current</span>
+            <span className='font-bold text-blue-900'>
+              {currentOdds?.home || '-'}
+            </span>
+          </div>
+          <div className='flex justify-end'>
+            {renderOddChange(currentOdds?.home, preMatchOdds?.home)}
+          </div>
+        </div>
+      </div>
+
+      <div className='p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border border-gray-200'>
+        <div className='text-sm font-medium text-gray-900 mb-2'>Draw</div>
+        <div className='space-y-2'>
+          <div className='flex items-center justify-between'>
+            <span className='text-sm text-gray-600'>Pre-match</span>
+            <span className='font-semibold text-gray-900'>
+              {preMatchOdds?.draw || '-'}
+            </span>
+          </div>
+          <div className='flex items-center justify-between'>
+            <span className='text-sm text-gray-600'>Current</span>
+            <span className='font-bold text-gray-900'>
+              {currentOdds?.draw || '-'}
+            </span>
+          </div>
+          <div className='flex justify-end'>
+            {renderOddChange(currentOdds?.draw, preMatchOdds?.draw)}
+          </div>
+        </div>
+      </div>
+
+      <div className='p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200'>
+        <div className='text-sm font-medium text-red-900 mb-2'>Away Win</div>
+        <div className='space-y-2'>
+          <div className='flex items-center justify-between'>
+            <span className='text-sm text-red-700'>Pre-match</span>
+            <span className='font-semibold text-red-900'>
+              {preMatchOdds?.away || '-'}
+            </span>
+          </div>
+          <div className='flex items-center justify-between'>
+            <span className='text-sm text-red-700'>Current</span>
+            <span className='font-bold text-red-900'>
+              {currentOdds?.away || '-'}
+            </span>
+          </div>
+          <div className='flex justify-end'>
+            {renderOddChange(currentOdds?.away, preMatchOdds?.away)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PredictionTab = ({
   details,
+  liveMarkets,
+  market,
+  tournament,
   h2h,
   form,
   homeGoals = 0,
@@ -108,6 +237,24 @@ const PredictionTab = ({
     };
   };
 
+  const getLiveOdds = () => {
+    const market = liveMarkets?.['0']?.outcomes;
+    if (!market) return null;
+
+    return {
+      home: market.find((o) => o.desc === 'Home')?.odds,
+      draw: market.find((o) => o.desc === 'Draw')?.odds,
+      away: market.find((o) => o.desc === 'Away')?.odds,
+    };
+  };
+
+  const getCurrentMatchTime = () => {
+    if (!events.length) return '';
+    const lastEvent = [...events].reverse().find((event) => event.time !== -1);
+    if (!lastEvent) return '';
+    return formatGameTime(lastEvent.time, lastEvent.injurytime);
+  };
+
   const calculatePredictions = useMemo(() => {
     try {
       let homeScore = 52; // Base home advantage
@@ -127,7 +274,6 @@ const PredictionTab = ({
         homeStats.goals = 50;
         awayStats.goals = 50;
       }
-
       if (details?.values) {
         // Process each statistic
         const statsToProcess = {
@@ -391,7 +537,7 @@ const PredictionTab = ({
 
     const totalComparison = calculateTotalComparison(predictions.stats);
     const teamColor = side === 'home' ? 'blue' : 'red';
-    const teamName = side === 'home' ? homeTeam?.name : awayTeam?.name;
+    const teamName = side === 'home' ? homeTeam : awayTeam;
 
     return (
       <div className={`bg-${teamColor}-50 rounded-lg p-6`}>
@@ -400,11 +546,9 @@ const PredictionTab = ({
             <h3 className='text-lg font-semibold text-gray-900'>
               {teamName || `${side === 'home' ? 'Home' : 'Away'} Team`}
             </h3>
-            {teamName && (
-              <span className='text-sm text-gray-500'>
-                {side === 'home' ? 'Home' : 'Away'}
-              </span>
-            )}
+            <span className='text-sm text-gray-500'>
+              {side === 'home' ? 'Home' : 'Away'}
+            </span>
           </div>
           <div className='text-3xl font-bold text-blue-600'>
             {predictions.stats[side].goals.toFixed(1)}%
@@ -486,28 +630,33 @@ const PredictionTab = ({
     );
   };
 
-  // Get current match time from the last event
-  const getCurrentMatchTime = () => {
-    if (!events.length) return '';
-    const lastEvent = [...events].reverse().find((event) => event.time !== -1);
-    if (!lastEvent) return '';
-    return formatGameTime(lastEvent.time, lastEvent.injurytime);
-  };
-
   return (
     <div className='space-y-6'>
       {/* Enhanced Score Card with Timeline */}
       <div className='bg-white rounded-lg shadow p-6'>
         <div className='flex justify-between items-center mb-4'>
-          <h3 className='text-base font-semibold'>Current Score</h3>
+          <div className='flex items-center gap-2'>
+            <Scale size={20} className='text-gray-600' />
+            <h3 className='text-base font-semibold'>Match Odds</h3>
+          </div>
           <span className='text-sm font-medium text-gray-500'>
             {getCurrentMatchTime()}
           </span>
         </div>
-        <div className='flex justify-around items-center mb-4'>
+
+        {/* Odds Comparison */}
+        <OddsComparison
+          market={market?.enrichedData?.prematchMarketData}
+          tournament={tournament}
+          currentOdds={getLiveOdds()}
+          homeTeam={homeTeam}
+          awayTeam={awayTeam}
+        />
+
+        <div className='flex justify-around items-center'>
           <div className='text-center w-1/3'>
             <div className='text-lg font-medium text-gray-600 mb-2'>
-              {homeTeam?.name || 'Home'}
+              {homeTeam || 'Home'}
             </div>
             <div className='text-6xl font-bold text-blue-500'>{homeGoals}</div>
             <div className='mt-3 space-y-1'>
@@ -531,7 +680,7 @@ const PredictionTab = ({
           <div className='text-4xl font-bold text-gray-300'>VS</div>
           <div className='text-center w-1/3'>
             <div className='text-lg font-medium text-gray-600 mb-2'>
-              {awayTeam?.name || 'Away'}
+              {awayTeam || 'Away'}
             </div>
             <div className='text-6xl font-bold text-red-500'>{awayGoals}</div>
             <div className='mt-3 space-y-1'>
@@ -617,35 +766,15 @@ const PredictionTab = ({
 };
 
 PredictionTab.propTypes = {
-  details: PropTypes.shape({
-    values: PropTypes.objectOf(
-      PropTypes.shape({
-        name: PropTypes.string,
-        value: PropTypes.shape({
-          home: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-          away: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        }),
-      })
-    ),
-    types: PropTypes.objectOf(PropTypes.string),
-  }),
-  h2h: PropTypes.shape({
-    home: PropTypes.number,
-    away: PropTypes.number,
-  }),
-  form: PropTypes.shape({
-    home: PropTypes.number,
-    away: PropTypes.number,
-  }),
+  market: PropTypes.object,
+  details: PropTypes.object,
+  h2h: PropTypes.object,
+  form: PropTypes.object,
   homeGoals: PropTypes.number,
   awayGoals: PropTypes.number,
-  events: PropTypes.arrayOf(PropTypes.object),
-  homeTeam: PropTypes.shape({
-    name: PropTypes.string,
-  }),
-  awayTeam: PropTypes.shape({
-    name: PropTypes.string,
-  }),
+  events: PropTypes.array,
+  homeTeam: PropTypes.string,
+  awayTeam: PropTypes.string,
 };
 
 export default PredictionTab;
