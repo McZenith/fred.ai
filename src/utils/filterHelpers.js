@@ -20,12 +20,10 @@ export const filterPredicates = {
   },
 
   highProbability: (event) => {
-    const analysis = event.enrichedData?.details.values;
+    const analysis = event.enrichedData?.details?.values;
     if (!analysis) return false;
-    return (
-      Object.keys(analysis).length > 10 &&
-      event.enrichedData?.prematchMarketData
-    );
+    //&& event.enrichedData?.prematchMarketData
+    return Object.keys(analysis).length > 10;
   },
 
   inCart: (event, isInCart) => {

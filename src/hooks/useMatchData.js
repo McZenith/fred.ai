@@ -2,6 +2,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { enrichMatch } from '@/utils/matchEnricher';
 
+const BATCH_SIZE = 10; // Increased from 5 to handle more matches simultaneously
+const UPDATE_INTERVAL = 15000; // Increased to 15 seconds to reduce API load
+const WORKER_POOL_SIZE = 8; // Increased from 4 to handle more concurrent processing
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000;
+
 export const useMatchData = () => {
   const [liveData, setLiveData] = useState([]);
   const [upcomingData, setUpcomingData] = useState([]);
@@ -9,258 +15,305 @@ export const useMatchData = () => {
   const [isInitialFetch, setIsInitialFetch] = useState(true);
   const [error, setError] = useState(null);
 
-  const updateIntervalRef = useRef(null);
+  const workers = useRef([]);
+  const activeRequests = useRef(new Map());
   const isPausedRef = useRef(false);
+  const updateIntervalRef = useRef(null);
+  const previousDataRef = useRef(null);
 
-  const hasValidData = useCallback((data) => {
-    return (
-      Array.isArray(data) &&
-      data.length > 0 &&
-      data.every(
-        (match) =>
-          match.enrichedData &&
-          match.enrichedData.analysis &&
-          match.tournamentName
-      )
-    );
+  // Initialize Web Workers with error handling
+  useEffect(() => {
+    if (typeof Window !== 'undefined') {
+      try {
+        workers.current = Array.from({ length: WORKER_POOL_SIZE }, () => {
+          const worker = new Worker(
+            new URL('../utils/matchWorker.js', import.meta.url)
+          );
+          worker.onerror = (error) => {
+            console.error('Worker initialization error:', error);
+            workers.current = workers.current.filter((w) => w !== worker);
+          };
+          return worker;
+        });
+
+        return () => {
+          workers.current.forEach((worker) => {
+            try {
+              worker.terminate();
+            } catch (error) {
+              console.error('Worker termination error:', error);
+            }
+          });
+        };
+      } catch (error) {
+        console.error('Worker initialization failed:', error);
+        workers.current = [];
+      }
+    }
   }, []);
 
-  const processMatchData = useCallback((match, initialData = null) => {
-    return {
-      ...match,
-      _stableKey: JSON.stringify({
-        id: match.eventId || match.matchId,
-        score: match.setScore,
-        time: match.playedSeconds,
-        status: match.matchStatus?.name,
-        analysis: {
-          stats: match.enrichedData?.analysis?.stats,
-          momentum: match.enrichedData?.analysis?.momentum?.trend,
-          timeline: match.enrichedData?.analysis?.momentum?.timeline,
+  // Enhanced fetch with retry logic
+  const fetchWithRetry = async (url, options = {}, retries = MAX_RETRIES) => {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
         },
-      }),
-      enrichedData: {
-        ...initialData?.enrichedData,
-        ...match.enrichedData,
-      },
-    };
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      if (retries > 0) {
+        console.warn(
+          `Retrying fetch for ${url}, ${retries} attempts remaining`
+        );
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+        return fetchWithRetry(url, options, retries - 1);
+      }
+      throw error;
+    }
+  };
+
+  const processMatchBatch = useCallback(async (matches, type = 'realtime') => {
+    const results = [];
+    const errors = [];
+
+    for (let i = 0; i < matches.length; i += BATCH_SIZE) {
+      const batch = matches.slice(i, i + BATCH_SIZE);
+      const batchPromises = batch.map((match) => {
+        return new Promise((resolve) => {
+          const worker = workers.current.find(
+            (w) => !activeRequests.current.has(w)
+          );
+
+          if (worker) {
+            const timeout = setTimeout(() => {
+              console.warn(`Worker timeout for match ${match.eventId}`);
+              worker.terminate();
+              workers.current = workers.current.filter((w) => w !== worker);
+              resolve({ ...match, _processingError: true });
+            }, 8000); // Increased timeout
+
+            worker.onmessage = (e) => {
+              clearTimeout(timeout);
+              activeRequests.current.delete(worker);
+              resolve(e.data.data);
+            };
+
+            worker.onerror = (error) => {
+              clearTimeout(timeout);
+              activeRequests.current.delete(worker);
+              console.error(`Worker error for match ${match.eventId}:`, error);
+              resolve({ ...match, _processingError: true });
+            };
+
+            activeRequests.current.set(worker, match.eventId);
+            worker.postMessage({ match, type });
+          } else {
+            // Fallback to main thread with error handling
+            enrichMatch[type](match)
+              .then(resolve)
+              .catch((error) => {
+                console.error(
+                  `Main thread error for match ${match.eventId}:`,
+                  error
+                );
+                resolve({ ...match, _processingError: true });
+              });
+          }
+        });
+      });
+
+      try {
+        const batchResults = await Promise.all(batchPromises);
+        results.push(
+          ...batchResults.filter((result) => !result._processingError)
+        );
+        errors.push(
+          ...batchResults.filter((result) => result._processingError)
+        );
+      } catch (error) {
+        console.error('Batch processing error:', error);
+      }
+
+      // Reduced delay between batches
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    // Retry failed matches once
+    if (errors.length > 0) {
+      console.log(`Retrying ${errors.length} failed matches...`);
+      const retryResults = await Promise.all(
+        errors.map((match) => enrichMatch[type](match).catch(() => null))
+      );
+      results.push(...retryResults.filter(Boolean));
+    }
+
+    return results;
   }, []);
+
+  const hasValidData = useCallback(
+    (data) => {
+      return (
+        Array.isArray(data) &&
+        data.length > 0 &&
+        data.every((match) => {
+          const hasBasicInfo = match.tournamentName && match.eventId;
+          const hasEnrichedData =
+            match.enrichedData?.analysis || isInitialFetch;
+          return hasBasicInfo && hasEnrichedData;
+        })
+      );
+    },
+    [isInitialFetch]
+  );
 
   const fetchAndEnrichLiveData = useCallback(async () => {
     if (isPausedRef.current) return;
 
-    setIsLoading(true);
     try {
-      const response = await fetch('/api/getData', { cache: 'no-store' });
-      const result = await response.json();
+      const result = await fetchWithRetry('/api/getData');
+      if (!result?.data) throw new Error('Invalid data received');
 
-      if (!result || !result.data) {
-        setError(new Error('Invalid data received from server'));
-        return;
-      }
-
-      let flattenedData = [];
-      if (Array.isArray(result.data)) {
-        flattenedData = result.data.flatMap((tournament) => {
-          if (tournament.events && Array.isArray(tournament.events)) {
-            return tournament.events.map((event) => ({
+      // Enhanced data flattening logic with error handling
+      const flattenedData = Array.isArray(result.data)
+        ? result.data.flatMap((tournament) => {
+            if (!tournament) return [];
+            const events = tournament.events || [];
+            return events.map((event) => ({
               ...event,
-              tournamentName: tournament.name,
+              tournamentName: tournament.name || 'Unknown Tournament',
+              _stableKey: `${event.eventId}-${event.updateTime || Date.now()}`,
             }));
-          }
-          return [];
-        });
-      } else if (result.data.tournaments) {
-        flattenedData = result.data.tournaments.flatMap((tournament) => {
-          if (tournament.events && Array.isArray(tournament.events)) {
-            return tournament.events.map((event) => ({
-              ...event,
-              tournamentName: tournament.name,
-            }));
-          }
-          return [];
-        });
-      } else {
-        setError(new Error('Unexpected data structure received'));
-        return;
-      }
-
-      if (isInitialFetch) {
-        const initialEnriched = await Promise.all(
-          flattenedData.map(async (match) => {
-            const [initialData, realtimeData] = await Promise.all([
-              enrichMatch.initial(match),
-              enrichMatch.realtime(match),
-            ]);
-            return processMatchData({
-              ...match,
-              enrichedData: {
-                ...initialData?.enrichedData,
-                ...realtimeData?.enrichedData,
-              },
-            });
           })
-        );
+        : (result.data.tournaments || []).flatMap((tournament) => {
+            if (!tournament) return [];
+            const events = tournament.events || [];
+            return events.map((event) => ({
+              ...event,
+              tournamentName: tournament.name || 'Unknown Tournament',
+              _stableKey: `${event.eventId}-${event.updateTime || Date.now()}`,
+            }));
+          });
 
-        if (hasValidData(initialEnriched)) {
-          setLiveData(
-            initialEnriched.filter(
-              (match) =>
-                !match.ai &&
-                !match.tournamentName?.toLowerCase().includes('srl') &&
-                !match.homeTeamName?.toLowerCase().includes('srl') &&
-                !match.awayTeamName?.toLowerCase().includes('srl') &&
-                match.tournamentName &&
-                match.enrichedData?.h2h &&
-                match.enrichedData?.form &&
-                match.enrichedData?.tournament &&
-                match.enrichedData?.details &&
-                match.enrichedData?.phrases &&
-                match.enrichedData?.situation &&
-                match.enrichedData?.timeline &&
-                match.enrichedData?.matchInfo &&
-                match.enrichedData?.odds &&
-                match.enrichedData?.squads
-            )
-          );
-        }
-        return;
-      }
-
-      const enrichedData = await Promise.all(
-        flattenedData.map(async (match) => {
-          const realtimeData = await enrichMatch.realtime(match);
-          const initialData = liveData.find(
-            (existingMatch) =>
-              existingMatch.id === match.id ||
-              existingMatch.matchId === match.matchId
-          );
-          return processMatchData(realtimeData, initialData);
-        })
+      // More lenient initial filtering
+      const validMatches = flattenedData.filter(
+        (match) =>
+          match.eventId &&
+          match.tournamentName &&
+          !match.tournamentName?.toLowerCase().includes('srl') &&
+          !match.homeTeamName?.toLowerCase().includes('srl') &&
+          !match.awayTeamName?.toLowerCase().includes('srl')
       );
 
-      const sortedData = enrichedData.sort((a, b) => {
-        const aProb = Math.max(
-          a.enrichedData?.analysis?.goalProbability?.home || 0,
-          a.enrichedData?.analysis?.goalProbability?.away || 0
-        );
-        const bProb = Math.max(
-          b.enrichedData?.analysis?.goalProbability?.home || 0,
-          b.enrichedData?.analysis?.goalProbability?.away || 0
-        );
-        return bProb - aProb;
-      });
+      if (validMatches.length === 0) {
+        console.warn('No valid matches found in response');
+        return;
+      }
 
-      if (hasValidData(sortedData)) {
+      const enrichedData = await processMatchBatch(
+        validMatches,
+        isInitialFetch ? 'initial' : 'realtime'
+      );
+
+      if (hasValidData(enrichedData)) {
         setLiveData((prevData) => {
-          const newData = sortedData.filter(
-            (match) =>
-              !match.ai &&
-              !match.tournamentName?.toLowerCase().includes('srl') &&
-              !match.homeTeamName?.toLowerCase().includes('srl') &&
-              !match.awayTeamName?.toLowerCase().includes('srl') &&
-              match.tournamentName &&
-              match.enrichedData?.h2h &&
-              match.enrichedData?.form &&
-              match.enrichedData?.tournament &&
-              match.enrichedData?.details &&
-              match.enrichedData?.phrases &&
-              match.enrichedData?.situation &&
-              match.enrichedData?.timeline &&
-              match.enrichedData?.matchInfo &&
-              match.enrichedData?.odds &&
-              match.enrichedData?.squads
-          );
+          const newData = enrichedData
+            .filter((match) => match.enrichedData?.analysis)
+            .sort((a, b) => {
+              const aProb = Math.max(
+                a.enrichedData?.analysis?.goalProbability?.home || 0,
+                a.enrichedData?.analysis?.goalProbability?.away || 0
+              );
+              const bProb = Math.max(
+                b.enrichedData?.analysis?.goalProbability?.home || 0,
+                b.enrichedData?.analysis?.goalProbability?.away || 0
+              );
+              return bProb - aProb;
+            });
 
-          // Only update if data has actually changed and updates aren't paused
-          if (
-            JSON.stringify(prevData.map((m) => m._stableKey)) ===
-              JSON.stringify(newData.map((m) => m._stableKey)) ||
-            isPausedRef.current
-          ) {
+          // Compare with previous data
+          const prevKeys = prevData.map((m) => m._stableKey).join(',');
+          const newKeys = newData.map((m) => m._stableKey).join(',');
+
+          if (prevKeys === newKeys && !isInitialFetch) {
             return prevData;
           }
+
+          // Store current data for future comparison
+          previousDataRef.current = newData;
           return newData;
         });
+      } else {
+        console.warn('Enriched data validation failed');
       }
     } catch (error) {
+      console.error('Error fetching live data:', error);
       setError(error);
     } finally {
       setIsLoading(false);
       setIsInitialFetch(false);
     }
-  }, [isInitialFetch, liveData, processMatchData, hasValidData]);
+  }, [isInitialFetch, processMatchBatch, hasValidData]);
 
   const fetchUpcomingData = useCallback(async () => {
-    setIsLoading(true);
     try {
-      const response = await fetch('/api/getUpcomingData', {
-        cache: 'no-store',
-      });
-      const result = await response.json();
+      const result = await fetchWithRetry('/api/getUpcomingData');
+      if (!result?.data) throw new Error('Invalid upcoming data');
 
-      if (!result?.data) {
-        setError(new Error('Invalid upcoming data received from server'));
-        setUpcomingData([]);
-        return;
-      }
-
-      let flattenedData = [];
-
-      if (Array.isArray(result.data)) {
-        flattenedData = result.data
-          .filter((tournament) => tournament && tournament.events)
-          .flatMap((tournament) => {
-            return Array.isArray(tournament.events)
-              ? tournament.events.map((event) =>
-                  processMatchData({
-                    ...event,
-                    tournamentName: tournament.name || 'Unknown Tournament',
-                  })
-                )
-              : [];
+      const flattenedData = Array.isArray(result.data)
+        ? result.data.flatMap((tournament) => {
+            if (!tournament) return [];
+            const events = tournament.events || [];
+            return events.map((event) => ({
+              ...event,
+              tournamentName: tournament.name || 'Unknown Tournament',
+              _stableKey: `${event.eventId}-${event.updateTime || Date.now()}`,
+            }));
+          })
+        : (result.data.tournaments || []).flatMap((tournament) => {
+            if (!tournament) return [];
+            const events = tournament.events || [];
+            return events.map((event) => ({
+              ...event,
+              tournamentName: tournament.name || 'Unknown Tournament',
+              _stableKey: `${event.eventId}-${event.updateTime || Date.now()}`,
+            }));
           });
-      } else if (result.data?.tournaments) {
-        flattenedData = (result.data.tournaments || [])
-          .filter((tournament) => tournament && tournament.events)
-          .flatMap((tournament) => {
-            return Array.isArray(tournament.events)
-              ? tournament.events.map((event) =>
-                  processMatchData({
-                    ...event,
-                    tournamentName: tournament.name || 'Unknown Tournament',
-                  })
-                )
-              : [];
-          });
-      }
+
+      const filteredData = flattenedData.filter(
+        (match) =>
+          match.eventId &&
+          match.tournamentName &&
+          !match.tournamentName?.toLowerCase().includes('srl') &&
+          !match.homeTeamName?.toLowerCase().includes('srl') &&
+          !match.awayTeamName?.toLowerCase().includes('srl')
+      );
 
       setUpcomingData((prevData) => {
-        const newData = flattenedData.filter(
-          (match) =>
-            !match.ai &&
-            !match.tournamentName?.toLowerCase().includes('srl') &&
-            !match.homeTeamName?.toLowerCase().includes('srl')
-        );
+        const prevKeys = prevData.map((m) => m._stableKey).join(',');
+        const newKeys = filteredData.map((m) => m._stableKey).join(',');
 
-        // Only update if data has actually changed
-        if (
-          JSON.stringify(prevData.map((m) => m._stableKey)) ===
-          JSON.stringify(newData.map((m) => m._stableKey))
-        ) {
+        if (prevKeys === newKeys) {
           return prevData;
         }
-        return newData;
+        return filteredData;
       });
     } catch (error) {
+      console.error('Error fetching upcoming data:', error);
       setError(error);
-      setUpcomingData([]);
-    } finally {
-      setIsLoading(false);
     }
-  }, [processMatchData]);
+  }, []);
 
-  // Pause updates
   const pauseUpdates = useCallback(() => {
     isPausedRef.current = true;
     if (updateIntervalRef.current) {
@@ -269,33 +322,44 @@ export const useMatchData = () => {
     }
   }, []);
 
-  // Resume updates
   const resumeUpdates = useCallback(() => {
     isPausedRef.current = false;
     if (!updateIntervalRef.current) {
-      updateIntervalRef.current = setInterval(fetchAndEnrichLiveData, 10000);
+      updateIntervalRef.current = setInterval(
+        fetchAndEnrichLiveData,
+        UPDATE_INTERVAL
+      );
     }
   }, [fetchAndEnrichLiveData]);
 
-  // Initial fetch
+  // Initial data fetch
   useEffect(() => {
     const initializeData = async () => {
       try {
         await Promise.all([fetchAndEnrichLiveData(), fetchUpcomingData()]);
       } catch (error) {
+        console.error('Error in initial data fetch:', error);
         setError(error);
       }
     };
 
     initializeData();
+
+    return () => {
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+      }
+    };
   }, [fetchAndEnrichLiveData, fetchUpcomingData]);
 
-  // Polling for live matches
+  // Set up polling interval after initial fetch
   useEffect(() => {
-    if (isInitialFetch) return;
-
-    updateIntervalRef.current = setInterval(fetchAndEnrichLiveData, 10000);
-    // hooks/useMatchData.js (continued)
+    if (!isInitialFetch && !updateIntervalRef.current && !isPausedRef.current) {
+      updateIntervalRef.current = setInterval(
+        fetchAndEnrichLiveData,
+        UPDATE_INTERVAL
+      );
+    }
 
     return () => {
       if (updateIntervalRef.current) {
@@ -303,15 +367,6 @@ export const useMatchData = () => {
       }
     };
   }, [isInitialFetch, fetchAndEnrichLiveData]);
-
-  // Add cleanup for component unmount
-  useEffect(() => {
-    return () => {
-      if (updateIntervalRef.current) {
-        clearInterval(updateIntervalRef.current);
-      }
-    };
-  }, []);
 
   return {
     liveData,

@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useTransition,
   useRef,
+  useEffect,
 } from 'react';
 import { CartProvider, useCart } from '@/hooks/useCart';
 import { FilterProvider, useFilter } from '@/hooks/filterContext';
@@ -16,7 +17,7 @@ import { FilterBar } from '@/components/FilterBar';
 import { Spinner } from './components/Spinner';
 
 const MatchCardSkeleton = () => (
-  <div className='animate-pulse bg-white rounded-xl shadow-lg p-4 space-y-4'>
+  <div className='animate-pulse bg-white rounded-xl shadow-lg p-4 mb-4 last:mb-0'>
     <div className='flex justify-between'>
       <div className='h-4 bg-gray-200 rounded w-1/3'></div>
       <div className='h-4 bg-gray-200 rounded w-8'></div>
@@ -38,59 +39,86 @@ const MatchCardSkeleton = () => (
   </div>
 );
 
-// Optimized MatchCard wrapper with height preservation
-const StableMatchCard = React.memo(({ event }) => {
-  const cardRef = useRef(null);
-  const [minHeight, setMinHeight] = useState('auto');
-  
-  // Set initial height after first render
-  React.useEffect(() => {
-    if (cardRef.current) {
-      const height = cardRef.current.getBoundingClientRect().height;
-      setMinHeight(`${height}px`);
-    }
-  }, []);
+// Optimized MatchCard wrapper with improved height handling
+const StableMatchCard = React.memo(
+  ({ event }) => {
+    const cardRef = useRef(null);
+    const [minHeight, setMinHeight] = useState('auto');
+    const resizeObserverRef = useRef(null);
 
-  // Create a stable key for the match data that only changes when important data changes
-  const stableKey = useMemo(() => {
-    return JSON.stringify({
-      score: event.setScore,
-      time: event.playedSeconds,
-      status: event.matchStatus?.name,
-      stats: event.enrichedData?.analysis?.stats,
-      momentum: event.enrichedData?.analysis?.momentum?.trend,
-      timeline: event.enrichedData?.analysis?.momentum?.timeline
-    });
-  }, [event]);
+    // Create a stable key for the match data that only changes when important data changes
+    const stableKey = useMemo(() => {
+      return JSON.stringify({
+        score: event.setScore,
+        time: event.playedSeconds,
+        status: event.matchStatus?.name,
+        stats: event.enrichedData?.analysis?.stats,
+        momentum: event.enrichedData?.analysis?.momentum?.trend,
+        timeline: event.enrichedData?.analysis?.momentum?.timeline,
+      });
+    }, [event]);
 
-  return (
-    <div ref={cardRef} style={{ minHeight }} className="transition-all duration-300">
-      <MatchCard event={event} stableKey={stableKey} />
-    </div>
-  );
-}, (prev, next) => {
-  // Custom comparison function
-  if (prev.event === next.event) return true;
-  
-  // Compare only essential fields
-  const essentialFieldsEqual = 
-    prev.event.setScore === next.event.setScore &&
-    prev.event.playedSeconds === next.event.playedSeconds &&
-    prev.event.matchStatus?.name === next.event.matchStatus?.name &&
-    JSON.stringify(prev.event.enrichedData?.analysis?.stats) === 
-    JSON.stringify(next.event.enrichedData?.analysis?.stats) &&
-    JSON.stringify(prev.event.enrichedData?.analysis?.momentum?.trend) ===
-    JSON.stringify(next.event.enrichedData?.analysis?.momentum?.trend);
+    // Set up ResizeObserver to handle dynamic height changes
+    useEffect(() => {
+      if (cardRef.current) {
+        resizeObserverRef.current = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            const height = entry.contentRect.height;
+            if (height > 0) {
+              setMinHeight(`${height}px`);
+            }
+          }
+        });
 
-  return essentialFieldsEqual;
-});
+        resizeObserverRef.current.observe(cardRef.current.firstChild);
 
-const MatchList = React.memo(({ matches }) => {
+        return () => {
+          if (resizeObserverRef.current) {
+            resizeObserverRef.current.disconnect();
+          }
+        };
+      }
+    }, []);
+
+    // Reset minHeight when event data changes significantly
+    useEffect(() => {
+      setMinHeight('auto');
+    }, [stableKey]);
+
+    return (
+      <div
+        ref={cardRef}
+        style={{ minHeight }}
+        className='transition-all duration-300 mb-4 last:mb-0'
+      >
+        <MatchCard event={event} stableKey={stableKey} />
+      </div>
+    );
+  },
+    (prev, next) => {
+      // Custom comparison function
+      if (prev.event === next.event) return true;
+
+      // Compare only essential fields
+      const essentialFieldsEqual =
+        prev.event.setScore === next.event.setScore &&
+        prev.event.playedSeconds === next.event.playedSeconds &&
+        prev.event.matchStatus?.name === next.event.matchStatus?.name &&
+        JSON.stringify(prev.event.enrichedData?.analysis?.stats) ===
+          JSON.stringify(next.event.enrichedData?.analysis?.stats) &&
+      JSON.stringify(prev.event.enrichedData?.analysis?.momentum?.trend) ===
+        JSON.stringify(next.event.enrichedData?.analysis?.momentum?.trend);
+
+    return essentialFieldsEqual;
+  }
+);
+
+const MatchList = React.memo(({ matches }) => { 
   // Create stable reference for the match list
   const stableMatches = useMemo(() => matches, [matches]);
 
   return (
-    <div className='space-y-4 transition-opacity duration-200'>
+    <div>
       {stableMatches.map((event) => (
         <StableMatchCard key={`${event.eventId}`} event={event} />
       ))}
@@ -224,7 +252,7 @@ const HomeContent = () => {
 
         <div className='mt-4'>
           {showSkeletons && (
-            <div className='space-y-4'>
+            <div>
               {[...Array(3)].map((_, i) => (
                 <MatchCardSkeleton key={i} />
               ))}
