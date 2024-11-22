@@ -62,8 +62,7 @@ export const GET = async () => {
     const concurrentRequests = 3; // Number of concurrent requests
 
     const createUrl = (pageNum) =>
-      `https://www.sportybet.com/api/ng/factsCenter/pcUpcomingEvents?sportId=sr%3Asport%3A1&marketId=1%2C18%2C10%2C29%2C11%2C26%2C36%2C14%2C60100&pageSize=${pageSize}&pageNum=${pageNum}&option=1&timeline=24&_t=${timestamp}`;
-
+      `https://www.sportybet.com/api/ng/factsCenter/pcUpcomingEvents?sportId=sr%3Asport%3A1&marketId=1%2C18%2C19%2C20%2C10%2C29%2C11%2C26%2C36%2C14%2C60100&pageSize=${pageSize}&pageNum=${pageNum}&option=1&timeline=24&_t=${timestamp}`;
     // Create array of page numbers
     const pageNumbers = Array.from({ length: pageLimit }, (_, i) => i + 1);
 

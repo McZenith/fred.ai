@@ -307,6 +307,14 @@ const analyzeMatchMomentum = memoize(
   }
 );
 
+async function getMatches() {
+  const res = await fetch(
+    `/api/match/${new Date().toISOString().split('T')[0]}`
+  );
+  const data = await res.json();
+  return data.matches;
+}
+
 // Export the optimized enrichment functions
 export const enrichMatch = {
   initial: async (match) => {
@@ -372,8 +380,8 @@ export const enrichMatch = {
       const recommendation = generateRecommendation(stats, goalProbability);
 
       // Get prematch data
-      const data = await import('@/utils/preMatchData.json');
-      const tournamentDataPrematch = data.default?.data?.tournaments?.find(
+      const data = await getMatches();
+      const tournamentDataPrematch = data?.data?.tournaments?.find(
         (t) => t.id === tournamentId
       );
       const prematchData = tournamentDataPrematch?.events?.find(
