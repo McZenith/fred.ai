@@ -8,7 +8,7 @@ export const useMatchData = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialFetch, setIsInitialFetch] = useState(true);
   const [error, setError] = useState(null);
-
+  const previousDataRef = useRef({ live: [], upcoming: [] });
   const updateIntervalRef = useRef(null);
   const isPausedRef = useRef(false);
 
@@ -46,6 +46,45 @@ export const useMatchData = () => {
     };
   }, []);
 
+  const mergeMatchData = useCallback((existingData, newData) => {
+    const mergedMap = new Map();
+
+    // First, add all existing data to the map
+    existingData.forEach((match) => {
+      mergedMap.set(match.eventId, match);
+    });
+
+    // Then merge in new data, preserving existing enrichedData where needed
+    newData.forEach((newMatch) => {
+      const existingMatch = mergedMap.get(newMatch.eventId);
+      if (existingMatch) {
+        // Preserve certain enriched data fields that shouldn't be overwritten
+        const preservedData = {
+          h2h: existingMatch.enrichedData?.h2h,
+          form: existingMatch.enrichedData?.form,
+          tournament: existingMatch.enrichedData?.tournament,
+          details: existingMatch.enrichedData?.details,
+          phrases: existingMatch.enrichedData?.phrases,
+          matchInfo: existingMatch.enrichedData?.matchInfo,
+          odds: existingMatch.enrichedData?.odds,
+          squads: existingMatch.enrichedData?.squads,
+        };
+
+        mergedMap.set(newMatch.eventId, {
+          ...newMatch,
+          enrichedData: {
+            ...preservedData,
+            ...newMatch.enrichedData,
+          },
+        });
+      } else {
+        mergedMap.set(newMatch.eventId, newMatch);
+      }
+    });
+
+    return Array.from(mergedMap.values());
+  }, []);
+
   const fetchAndEnrichLiveData = useCallback(async () => {
     if (isPausedRef.current) return;
 
@@ -80,9 +119,6 @@ export const useMatchData = () => {
           }
           return [];
         });
-      } else {
-        setError(new Error('Unexpected data structure received'));
-        return;
       }
 
       if (isInitialFetch) {
@@ -103,26 +139,27 @@ export const useMatchData = () => {
         );
 
         if (hasValidData(initialEnriched)) {
-          setLiveData(
-            initialEnriched.filter(
-              (match) =>
-                !match.ai &&
-                !match.tournamentName?.toLowerCase().includes('srl') &&
-                !match.homeTeamName?.toLowerCase().includes('srl') &&
-                !match.awayTeamName?.toLowerCase().includes('srl') &&
-                match.tournamentName &&
-                match.enrichedData?.h2h &&
-                match.enrichedData?.form &&
-                match.enrichedData?.tournament &&
-                match.enrichedData?.details &&
-                match.enrichedData?.phrases &&
-                match.enrichedData?.situation &&
-                match.enrichedData?.timeline &&
-                match.enrichedData?.matchInfo &&
-                match.enrichedData?.odds &&
-                match.enrichedData?.squads
-            )
+          const filteredData = initialEnriched.filter(
+            (match) =>
+              !match.ai &&
+              !match.tournamentName?.toLowerCase().includes('srl') &&
+              !match.homeTeamName?.toLowerCase().includes('srl') &&
+              !match.awayTeamName?.toLowerCase().includes('srl') &&
+              match.tournamentName &&
+              match.enrichedData?.h2h &&
+              match.enrichedData?.form &&
+              match.enrichedData?.tournament &&
+              match.enrichedData?.details &&
+              match.enrichedData?.phrases &&
+              match.enrichedData?.situation &&
+              match.enrichedData?.timeline &&
+              match.enrichedData?.matchInfo &&
+              match.enrichedData?.odds &&
+              match.enrichedData?.squads
           );
+
+          setLiveData(filteredData);
+          previousDataRef.current.live = filteredData;
         }
         return;
       }
@@ -130,9 +167,9 @@ export const useMatchData = () => {
       const enrichedData = await Promise.all(
         flattenedData.map(async (match) => {
           const realtimeData = await enrichMatch.realtime(match);
-          const initialData = liveData.find(
+          const initialData = previousDataRef.current.live.find(
             (existingMatch) =>
-              existingMatch.id === match.id ||
+              existingMatch.eventId === match.eventId ||
               existingMatch.matchId === match.matchId
           );
           return processMatchData(realtimeData, initialData);
@@ -153,7 +190,7 @@ export const useMatchData = () => {
 
       if (hasValidData(sortedData)) {
         setLiveData((prevData) => {
-          const newData = sortedData.filter(
+          const filteredData = sortedData.filter(
             (match) =>
               !match.ai &&
               !match.tournamentName?.toLowerCase().includes('srl') &&
@@ -175,12 +212,15 @@ export const useMatchData = () => {
           // Only update if data has actually changed and updates aren't paused
           if (
             JSON.stringify(prevData.map((m) => m._stableKey)) ===
-              JSON.stringify(newData.map((m) => m._stableKey)) ||
+              JSON.stringify(filteredData.map((m) => m._stableKey)) ||
             isPausedRef.current
           ) {
             return prevData;
           }
-          return newData;
+
+          const mergedData = mergeMatchData(prevData, filteredData);
+          previousDataRef.current.live = mergedData;
+          return mergedData;
         });
       }
     } catch (error) {
@@ -189,7 +229,7 @@ export const useMatchData = () => {
       setIsLoading(false);
       setIsInitialFetch(false);
     }
-  }, [isInitialFetch, liveData, processMatchData, hasValidData]);
+  }, [isInitialFetch, processMatchData, hasValidData, mergeMatchData]);
 
   const fetchUpcomingData = useCallback(async () => {
     setIsLoading(true);
@@ -206,7 +246,6 @@ export const useMatchData = () => {
       }
 
       let flattenedData = [];
-
       if (Array.isArray(result.data)) {
         flattenedData = result.data
           .filter((tournament) => tournament && tournament.events)
@@ -243,14 +282,16 @@ export const useMatchData = () => {
             !match.homeTeamName?.toLowerCase().includes('srl')
         );
 
-        // Only update if data has actually changed
         if (
           JSON.stringify(prevData.map((m) => m._stableKey)) ===
           JSON.stringify(newData.map((m) => m._stableKey))
         ) {
           return prevData;
         }
-        return newData;
+
+        const mergedData = mergeMatchData(prevData, newData);
+        previousDataRef.current.upcoming = mergedData;
+        return mergedData;
       });
     } catch (error) {
       setError(error);
@@ -258,7 +299,7 @@ export const useMatchData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [processMatchData]);
+  }, [processMatchData, mergeMatchData]);
 
   // Pause updates
   const pauseUpdates = useCallback(() => {
@@ -295,7 +336,6 @@ export const useMatchData = () => {
     if (isInitialFetch) return;
 
     updateIntervalRef.current = setInterval(fetchAndEnrichLiveData, 10000);
-    // hooks/useMatchData.js (continued)
 
     return () => {
       if (updateIntervalRef.current) {

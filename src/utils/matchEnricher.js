@@ -2,7 +2,7 @@ import { API_ROUTES } from './constants';
 // utils/matchEnricher.js
 const API_TIMEOUT = 3000; // 3 seconds timeout for API calls
 
-// Enhanced fetch helper with timeout and retry logic
+// Enhanced fetch helper with better error handling and fallbacks
 const fetchEndpoint = async (route, params = {}, retries = 2) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
@@ -19,6 +19,8 @@ const fetchEndpoint = async (route, params = {}, retries = 2) => {
         Pragma: 'no-cache',
         Expires: '0',
       },
+    }).catch((error) => {
+      throw new Error(`Network error: ${error.message}`);
     });
 
     clearTimeout(timeoutId);
@@ -27,7 +29,12 @@ const fetchEndpoint = async (route, params = {}, retries = 2) => {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    return await response.json();
+    const data = await response.json().catch(() => null);
+    if (!data) {
+      throw new Error('Invalid JSON response');
+    }
+
+    return data;
   } catch (error) {
     clearTimeout(timeoutId);
 
@@ -36,11 +43,26 @@ const fetchEndpoint = async (route, params = {}, retries = 2) => {
     }
 
     if (retries > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Exponential backoff
+      const backoffDelay = Math.min(1000 * 2 ** (2 - retries), 5000);
+      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
       return fetchEndpoint(route, params, retries - 1);
     }
 
-    return null;
+    // Return a safe fallback object instead of null
+    return {
+      doc: [
+        {
+          data: {
+            values: {},
+            events: [],
+            periods: [],
+            matches: [],
+            markets: [],
+          },
+        },
+      ],
+    };
   }
 };
 
@@ -327,94 +349,171 @@ export const enrichMatch = {
       const tournamentId = match.sport?.category?.tournament?.id;
       const bracketsId = match.eventId;
 
-      // Parallel data fetching with optimized batching
-      const [matchData, teamData, tournamentData] = await Promise.all([
-        fetchMatchDataParallel(matchId, [
-          'info',
-          'squads',
-          'odds',
-          'timeline',
-          'timelineDelta',
-          'situation',
-          'details',
-          'phrases',
-        ]),
+      // Add error boundaries around the parallel data fetching
+      const [matchData, teamData, tournamentData] = await Promise.allSettled([
+        // Match data fetching with fallbacks
         Promise.all([
-          fetchTeamData.form(match.homeTeamId),
-          fetchTeamData.form(match.awayTeamId),
-          fetchTeamData.versus(match.homeTeamId, match.awayTeamId),
-        ]),
+          fetchEndpoint(API_ROUTES.MATCH_INFO, { matchId }).catch(() => ({
+            doc: [{ data: {} }],
+          })),
+          fetchEndpoint(API_ROUTES.SQUADS, { matchId }).catch(() => ({
+            doc: [{ data: {} }],
+          })),
+          fetchEndpoint(API_ROUTES.ODDS, { matchId }).catch(() => ({
+            doc: [{ data: {} }],
+          })),
+          fetchEndpoint(API_ROUTES.TIMELINE, { matchId }).catch(() => ({
+            doc: [{ data: { events: [] } }],
+          })),
+          fetchEndpoint(API_ROUTES.TIMELINE_DELTA, { matchId }).catch(() => ({
+            doc: [{ data: {} }],
+          })),
+          fetchEndpoint(API_ROUTES.SITUATION, { matchId }).catch(() => ({
+            doc: [{ data: {} }],
+          })),
+          fetchEndpoint(API_ROUTES.DETAILS, { matchId }).catch(() => ({
+            doc: [{ data: { values: {} } }],
+          })),
+          fetchEndpoint(API_ROUTES.PHRASES, { matchId }).catch(() => ({
+            doc: [{ data: {} }],
+          })),
+        ]).catch(() => []),
+
+        // Team data fetching with fallbacks
         Promise.all([
-          fetchEndpoint(API_ROUTES.SEASON_META, { tournamentId }),
-          fetchEndpoint(API_ROUTES.CUP_BRACKETS, { bracketsId }),
-          fetchEndpoint(API_ROUTES.SEASON_GOALS, { tournamentId }),
-          fetchEndpoint(API_ROUTES.SEASON_CARDS, { tournamentId }),
-          fetchEndpoint(API_ROUTES.SEASON_TABLE, { tournamentId }),
-        ]),
+          fetchEndpoint(API_ROUTES.TEAM_FORM, {
+            teamId: match.homeTeamId,
+          }).catch(() => ({ doc: [{ data: {} }] })),
+          fetchEndpoint(API_ROUTES.TEAM_FORM, {
+            teamId: match.awayTeamId,
+          }).catch(() => ({ doc: [{ data: {} }] })),
+          fetchEndpoint(API_ROUTES.TEAM_VERSUS, {
+            teamId1: match.homeTeamId,
+            teamId2: match.awayTeamId,
+          }).catch(() => ({ doc: [{ data: {} }] })),
+        ]).catch(() => []),
+
+        // Tournament data fetching with fallbacks
+        Promise.all([
+          fetchEndpoint(API_ROUTES.SEASON_META, { tournamentId }).catch(() => ({
+            doc: [{ data: {} }],
+          })),
+          fetchEndpoint(API_ROUTES.CUP_BRACKETS, { bracketsId }).catch(() => ({
+            doc: [{ data: {} }],
+          })),
+          fetchEndpoint(API_ROUTES.SEASON_GOALS, { tournamentId }).catch(
+            () => ({ doc: [{ data: {} }] })
+          ),
+          fetchEndpoint(API_ROUTES.SEASON_CARDS, { tournamentId }).catch(
+            () => ({ doc: [{ data: {} }] })
+          ),
+          fetchEndpoint(API_ROUTES.SEASON_TABLE, { tournamentId }).catch(
+            () => ({ doc: [{ data: {} }] })
+          ),
+        ]).catch(() => []),
       ]);
 
-      const [homeForm, awayForm, headToHead] = teamData;
-      const [seasonMeta, cupBrackets, seasonGoals, seasonCards, seasonTable] =
-        tournamentData;
+      // Safely extract data with fallbacks
+      const [matchDataResult, teamDataResult, tournamentDataResult] = [
+        matchData.status === 'fulfilled' ? matchData.value : [],
+        teamData.status === 'fulfilled' ? teamData.value : [],
+        tournamentData.status === 'fulfilled' ? tournamentData.value : [],
+      ];
 
-      // Process and analyze the enriched data
+      const [
+        matchInfo = { doc: [{ data: {} }] },
+        squads = { doc: [{ data: {} }] },
+        odds = { doc: [{ data: {} }] },
+        timeline = { doc: [{ data: { events: [] } }] },
+        timelineDelta = { doc: [{ data: {} }] },
+        situation = { doc: [{ data: {} }] },
+        details = { doc: [{ data: { values: {} } }] },
+        phrases = { doc: [{ data: {} }] },
+      ] = matchDataResult;
+
+      const [
+        homeForm = { doc: [{ data: {} }] },
+        awayForm = { doc: [{ data: {} }] },
+        headToHead = { doc: [{ data: {} }] },
+      ] = teamDataResult;
+
+      const [
+        seasonMeta = { doc: [{ data: {} }] },
+        cupBrackets = { doc: [{ data: {} }] },
+        seasonGoals = { doc: [{ data: {} }] },
+        seasonCards = { doc: [{ data: {} }] },
+        seasonTable = { doc: [{ data: {} }] },
+      ] = tournamentDataResult;
+
+      // Process and analyze the enriched data with safe fallbacks
       const mergedTimeline = {
-        complete:
-          matchData.timeline?.doc?.[0]?.data || matchData.timeline?.doc || null,
-        delta:
-          matchData.timelineDelta?.doc?.[0]?.data ||
-          matchData.timelineDelta?.data ||
-          null,
+        complete: timeline?.doc?.[0]?.data || { events: [] },
+        delta: timelineDelta?.doc?.[0]?.data || {},
       };
 
       const momentum = analyzeMatchMomentum(
-        matchData.situation?.doc?.[0]?.data || matchData.situation?.data,
-        matchData.timelineDelta?.doc?.[0]?.data ||
-          matchData.timelineDelta?.data,
-        matchData.details?.doc?.[0]?.data || matchData.details?.data,
+        situation?.doc?.[0]?.data || { data: [] },
+        timelineDelta?.doc?.[0]?.data || {},
+        details?.doc?.[0]?.data || { values: {} },
         mergedTimeline.complete
-      );
+      ) || { recent: { home: 0, away: 0 }, trend: [] };
 
       const stats = calculateMatchStats(
-        matchData.details?.doc?.[0]?.data || matchData.details?.data,
+        details?.doc?.[0]?.data || { values: {} },
         mergedTimeline.complete
-      );
+      ) || {
+        attacks: { home: 0, away: 0 },
+        dangerous: { home: 0, away: 0 },
+        possession: { home: 50, away: 50 },
+        shots: {
+          onTarget: { home: 0, away: 0 },
+          offTarget: { home: 0, away: 0 },
+        },
+        corners: { home: 0, away: 0 },
+        cards: { yellow: { home: 0, away: 0 }, red: { home: 0, away: 0 } },
+      };
 
-      const goalProbability = calculateGoalProbability(momentum, stats);
-      const recommendation = generateRecommendation(stats, goalProbability);
+      const goalProbability = calculateGoalProbability(momentum, stats) || {
+        home: 0,
+        away: 0,
+      };
+      const recommendation = generateRecommendation(stats, goalProbability) || {
+        type: 'NO_PREDICTION',
+        confidence: 0,
+        reasons: ['Insufficient data'],
+      };
 
-      // Get prematch data
-      const data = await getPrematchData(match.eventId);
-      const market = data?.markets;
+      // Get prematch data with fallback
+      let market = [];
+      try {
+        const data = await getPrematchData(match.eventId);
+        market = data?.markets || [];
+      } catch (error) {
+        console.warn('Failed to fetch prematch data:', error);
+      }
 
       return {
         ...match,
         enrichedData: {
-          matchInfo: matchData.info?.doc?.[0].data,
-          squads:
-            matchData.squads?.doc?.[0].data || matchData.squads?.doc || null,
-          odds: matchData.odds?.doc?.[0].data || matchData.odds?.doc || null,
+          matchInfo: matchInfo?.doc?.[0].data || {},
+          squads: squads?.doc?.[0].data || {},
+          odds: odds?.doc?.[0].data || {},
           timeline: mergedTimeline,
           form: {
-            home: homeForm?.doc?.[0].data || null,
-            away: awayForm?.doc?.[0].data || null,
+            home: homeForm?.doc?.[0].data || {},
+            away: awayForm?.doc?.[0].data || {},
           },
-          h2h: headToHead?.doc?.[0].data || null,
+          h2h: headToHead?.doc?.[0].data || {},
           tournament: {
-            cupBrackets: cupBrackets?.doc?.[0].data || null,
-            seasonMeta: seasonMeta?.doc?.[0].data || null,
-            goals: seasonGoals?.doc?.[0].data || null,
-            cards: seasonCards?.doc?.[0].data || null,
-            table: seasonTable?.doc?.[0].data || null,
+            cupBrackets: cupBrackets?.doc?.[0].data || {},
+            seasonMeta: seasonMeta?.doc?.[0].data || {},
+            goals: seasonGoals?.doc?.[0].data || {},
+            cards: seasonCards?.doc?.[0].data || {},
+            table: seasonTable?.doc?.[0].data || {},
           },
-          situation:
-            matchData.situation?.doc?.[0]?.data ||
-            matchData.situation?.doc ||
-            null,
-          details:
-            matchData.details?.doc?.[0]?.data || matchData.details?.doc || null,
-          phrases:
-            matchData.phrases?.doc?.[0]?.data || matchData.phrases?.doc || null,
+          situation: situation?.doc?.[0]?.data || {},
+          details: details?.doc?.[0]?.data || { values: {} },
+          phrases: phrases?.doc?.[0]?.data || {},
           prematchMarketData: market,
           analysis: {
             momentum,
@@ -425,8 +524,47 @@ export const enrichMatch = {
         },
       };
     } catch (error) {
-      console.error('Error in enrichMatch.initial:', error);
-      return match;
+      console.warn('Error in enrichMatch.initial:', error);
+      // Return match with safe fallback enriched data
+      return {
+        ...match,
+        enrichedData: {
+          matchInfo: {},
+          squads: {},
+          odds: {},
+          timeline: { complete: { events: [] }, delta: {} },
+          form: { home: {}, away: {} },
+          h2h: {},
+          tournament: {},
+          situation: {},
+          details: { values: {} },
+          phrases: {},
+          prematchMarketData: [],
+          analysis: {
+            momentum: { recent: { home: 0, away: 0 }, trend: [] },
+            stats: {
+              attacks: { home: 0, away: 0 },
+              dangerous: { home: 0, away: 0 },
+              possession: { home: 50, away: 50 },
+              shots: {
+                onTarget: { home: 0, away: 0 },
+                offTarget: { home: 0, away: 0 },
+              },
+              corners: { home: 0, away: 0 },
+              cards: {
+                yellow: { home: 0, away: 0 },
+                red: { home: 0, away: 0 },
+              },
+            },
+            goalProbability: { home: 0, away: 0 },
+            recommendation: {
+              type: 'NO_PREDICTION',
+              confidence: 0,
+              reasons: ['Data unavailable'],
+            },
+          },
+        },
+      };
     }
   },
 

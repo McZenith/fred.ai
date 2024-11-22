@@ -212,6 +212,12 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
   const outcomes = [
     // Team totals - Home
     {
+      name: 'Home Over 0.5',
+      team: 'home',
+      specifier: '0.5',
+      desc: 'Over 0.5',
+    },
+    {
       name: 'Home Over 1.5',
       team: 'home',
       specifier: '1.5',
@@ -224,6 +230,12 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
       desc: 'Over 2.5',
     },
     // Team totals - Away
+    {
+      name: 'Away Over 0.5',
+      team: 'away',
+      specifier: '0.5',
+      desc: 'Over 0.5',
+    },
     {
       name: 'Away Over 1.5',
       team: 'away',

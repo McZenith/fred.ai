@@ -11,7 +11,7 @@ import React, {
 import { CartProvider, useCart } from '@/hooks/useCart';
 import { FilterProvider, useFilter } from '@/hooks/filterContext';
 import { useMatchData } from '@/hooks/useMatchData';
-import MatchCard from '@/components/MatchCard';
+import MatchCard, { useDataTransition } from '@/components/MatchCard';
 import { HeaderControls } from '@/components/HeaderControls';
 import { FilterBar } from '@/components/FilterBar';
 import { Spinner } from './components/Spinner';
@@ -39,26 +39,32 @@ const MatchCardSkeleton = () => (
   </div>
 );
 
-// Optimized MatchCard wrapper with improved height handling
 const StableMatchCard = React.memo(
   ({ event }) => {
     const cardRef = useRef(null);
     const [minHeight, setMinHeight] = useState('auto');
     const resizeObserverRef = useRef(null);
+    const prevEventRef = useRef(event);
 
-    // Create a stable key for the match data that only changes when important data changes
     const stableKey = useMemo(() => {
       return JSON.stringify({
+        id: event.eventId,
         score: event.setScore,
         time: event.playedSeconds,
         status: event.matchStatus?.name,
-        stats: event.enrichedData?.analysis?.stats,
-        momentum: event.enrichedData?.analysis?.momentum?.trend,
-        timeline: event.enrichedData?.analysis?.momentum?.timeline,
+        analysis: {
+          stats: event.enrichedData?.analysis?.stats,
+          momentum: event.enrichedData?.analysis?.momentum?.trend,
+          timeline: event.enrichedData?.analysis?.momentum?.timeline,
+        },
       });
     }, [event]);
 
-    // Set up ResizeObserver to handle dynamic height changes
+    const [displayEvent, isTransitioning] = useDataTransition(
+      event,
+      prevEventRef.current
+    );
+
     useEffect(() => {
       if (cardRef.current) {
         resizeObserverRef.current = new ResizeObserver((entries) => {
@@ -80,7 +86,10 @@ const StableMatchCard = React.memo(
       }
     }, []);
 
-    // Reset minHeight when event data changes significantly
+    useEffect(() => {
+      prevEventRef.current = event;
+    }, [event]);
+
     useEffect(() => {
       setMinHeight('auto');
     }, [stableKey]);
@@ -89,33 +98,67 @@ const StableMatchCard = React.memo(
       <div
         ref={cardRef}
         style={{ minHeight }}
-        className='transition-all duration-300 mb-4 last:mb-0'
+        className={`transition-all duration-300 mb-4 last:mb-0 ${
+          isTransitioning ? 'opacity-90' : 'opacity-100'
+        }`}
       >
-        <MatchCard event={event} stableKey={stableKey} />
+        <MatchCard
+          event={displayEvent}
+          stableKey={stableKey}
+          prevEvent={prevEventRef.current}
+        />
       </div>
     );
   },
-    (prev, next) => {
-      // Custom comparison function
-      if (prev.event === next.event) return true;
+  (prev, next) => {
+    if (prev.event === next.event) return true;
 
-      // Compare only essential fields
-      const essentialFieldsEqual =
-        prev.event.setScore === next.event.setScore &&
-        prev.event.playedSeconds === next.event.playedSeconds &&
-        prev.event.matchStatus?.name === next.event.matchStatus?.name &&
-        JSON.stringify(prev.event.enrichedData?.analysis?.stats) ===
-          JSON.stringify(next.event.enrichedData?.analysis?.stats) &&
-      JSON.stringify(prev.event.enrichedData?.analysis?.momentum?.trend) ===
-        JSON.stringify(next.event.enrichedData?.analysis?.momentum?.trend);
+    const essentialFields = [
+      'setScore',
+      'playedSeconds',
+      'matchStatus.name',
+      'enrichedData.analysis.stats',
+      'enrichedData.analysis.momentum.trend',
+      'enrichedData.analysis.momentum.timeline',
+      'enrichedData.details.values',
+      'markets',
+    ];
 
-    return essentialFieldsEqual;
+    const getNestedValue = (obj, path) => {
+      return path.split('.').reduce((acc, part) => acc?.[part], obj);
+    };
+
+    return essentialFields.every((field) => {
+      const prevValue = getNestedValue(prev.event, field);
+      const nextValue = getNestedValue(next.event, field);
+
+      if (typeof prevValue === 'object' && prevValue !== null) {
+        return JSON.stringify(prevValue) === JSON.stringify(nextValue);
+      }
+
+      return prevValue === nextValue;
+    });
   }
 );
 
-const MatchList = React.memo(({ matches }) => { 
-  // Create stable reference for the match list
-  const stableMatches = useMemo(() => matches, [matches]);
+const MatchList = React.memo(({ matches }) => {
+  const prevMatchesRef = useRef(matches);
+
+  const stableMatches = useMemo(() => {
+    const hasSignificantChanges = matches.some((match, index) => {
+      const prevMatch = prevMatchesRef.current[index];
+      if (!prevMatch) return true;
+
+      return (
+        match.setScore !== prevMatch.setScore ||
+        match.playedSeconds !== prevMatch.playedSeconds ||
+        match.matchStatus?.name !== prevMatch.matchStatus?.name
+      );
+    });
+
+    prevMatchesRef.current = matches;
+    return hasSignificantChanges ? matches : prevMatchesRef.current;
+  }, [matches]);
 
   return (
     <div>
@@ -149,6 +192,7 @@ const HomeContent = () => {
   const [copyMessage, setCopyMessage] = useState('');
   const [isPending, startTransition] = useTransition();
   const [isPaused, setIsPaused] = useState(false);
+  const prevDataRef = useRef({ live: [], upcoming: [] });
 
   const { isInCart, showCartOnly } = useCart();
   const { applyFilters } = useFilter();
@@ -190,16 +234,41 @@ const HomeContent = () => {
     });
   }, [pauseUpdates, resumeUpdates]);
 
-  // Stabilize filtered data
   const filteredData = useMemo(() => {
     const sourceData = activeTab === 'live' ? liveData : upcomingData;
+    const prevData =
+      activeTab === 'live'
+        ? prevDataRef.current.live
+        : prevDataRef.current.upcoming;
+
     let filtered = sourceData;
 
     if (showCartOnly) {
       filtered = filtered.filter((event) => isInCart(event.eventId));
     }
 
-    return applyFilters(filtered, isInCart);
+    const result = applyFilters(filtered, isInCart);
+
+    // Sort by match status and time
+    const sortedResult = result.sort((a, b) => {
+      // Priority to live matches
+      if (a.matchStatus?.name === 'LIVE' && b.matchStatus?.name !== 'LIVE')
+        return -1;
+      if (b.matchStatus?.name === 'LIVE' && a.matchStatus?.name !== 'LIVE')
+        return 1;
+
+      // Then by played time
+      return (b.playedSeconds || 0) - (a.playedSeconds || 0);
+    });
+
+    // Update previous data reference
+    if (activeTab === 'live') {
+      prevDataRef.current.live = sortedResult;
+    } else {
+      prevDataRef.current.upcoming = sortedResult;
+    }
+
+    return sortedResult;
   }, [activeTab, liveData, upcomingData, showCartOnly, isInCart, applyFilters]);
 
   const copyHomeTeams = useCallback(() => {
@@ -280,7 +349,6 @@ const HomeContent = () => {
   );
 };
 
-// Wrap the entire app with providers and Suspense
 const Home = () => (
   <CartProvider>
     <FilterProvider>
