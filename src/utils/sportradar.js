@@ -19,7 +19,7 @@ export const SPORTRADAR_HEADERS = {
 
 export const BASE_URL = 'https://lmt.fn.sportradar.com/common/en/Etc:UTC/gismo';
 
-export const SPORTRADAR_API_KEY = `?T=exp=1732325829~acl=/*~data=eyJvIjoiaHR0cHM6Ly93d3cuc3BvcnR5YmV0LmNvbSIsImEiOiI2Mzg4NDZiOTNiMjNlY2ZjOTRjZTFhNmQ0NWIxZGJlNiIsImFjdCI6Im9yaWdpbmNoZWNrIiwib3NyYyI6Im9yaWdpbiJ9~hmac=ed0165ec6827e7e1d2d301039061d06fa7fddfa8268e6055e1b0e439b288572e`;
+export const SPORTRADAR_API_KEY = `?T=exp=1732394949~acl=/*~data=eyJvIjoiaHR0cHM6Ly93d3cuc3BvcnR5YmV0LmNvbSIsImEiOiI2Mzg4NDZiOTNiMjNlY2ZjOTRjZTFhNmQ0NWIxZGJlNiIsImFjdCI6Im9yaWdpbmNoZWNrIiwib3NyYyI6Im9yaWdpbiJ9~hmac=8f74cad80b93ccf08c96ecb3ba074e0fa8fa1c3cdd4e7b61a424c3798cce54ab`;
 
 export const handleError = (error) => {
   const statusCode = error.response?.status || 500;
