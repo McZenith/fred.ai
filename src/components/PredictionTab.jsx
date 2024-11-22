@@ -16,20 +16,20 @@ import PropTypes from 'prop-types';
 // Utility function to get market values
 const getMarketValue = (markets, outcome, specifier = null) => {
   // For total goals markets
-  const market = markets?.find(m => {
+  const market = markets?.find((m) => {
     if (specifier) {
-      return m.id === "18" && m.specifier === specifier;
+      return m.id === '18' || (m.id === '19' && m.specifier === specifier);
     }
     // For team totals
     if (outcome.team === 'home') {
-      return m.id === "19" && m.specifier === outcome.specifier;
+      return m.id === '19' && m.specifier === outcome.specifier;
     }
     if (outcome.team === 'away') {
-      return m.id === "20" && m.specifier === outcome.specifier;
+      return m.id === '20' && m.specifier === outcome.specifier;
     }
     // For BTTS
     if (outcome.type === 'btts') {
-      return m.id === "29";
+      return m.id === '29';
     }
     return false;
   });
@@ -38,13 +38,13 @@ const getMarketValue = (markets, outcome, specifier = null) => {
   let odds = null;
 
   if (market) {
-    const outcomeObj = market.outcomes.find(o => {
+    const outcomeObj = market.outcomes.find((o) => {
       if (outcome.type === 'btts') {
         return o.desc === 'Yes';
       }
       return o.desc === outcome.desc;
     });
-    
+
     if (outcomeObj) {
       probability = parseFloat(outcomeObj.probability);
       odds = parseFloat(outcomeObj.odds);
@@ -62,21 +62,21 @@ const calculateDiff = (current, previous) => {
 
 // Utility function to render trend arrows
 const renderTrend = (diff) => {
-  if (diff === null) return <Minus className="w-4 h-4 text-gray-400" />;
-  
+  if (diff === null) return <Minus className='w-4 h-4 text-gray-400' />;
+
   if (diff > 0) {
     return (
-      <div className="flex items-center text-green-600">
-        <ArrowUp className="w-4 h-4" />
-        <span className="text-xs ml-1">({diff.toFixed(1)}%)</span>
+      <div className='flex items-center text-green-600'>
+        <ArrowUp className='w-4 h-4' />
+        <span className='text-xs ml-1'>({diff.toFixed(1)}%)</span>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center text-red-600">
-      <ArrowDown className="w-4 h-4" />
-      <span className="text-xs ml-1">({Math.abs(diff).toFixed(1)}%)</span>
+    <div className='flex items-center text-red-600'>
+      <ArrowDown className='w-4 h-4' />
+      <span className='text-xs ml-1'>({Math.abs(diff).toFixed(1)}%)</span>
     </div>
   );
 };
@@ -231,14 +231,14 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
     },
     // Match totals
     {
-      name: 'Over 1.5 Goals',
+      name: 'Over/Under 1.5',
       specifier: 'total=1.5',
-      desc: 'Over 1.5',
+      desc: 'Over/Under 1.5',
     },
     {
-      name: 'Over 2.5 Goals',
+      name: 'Over/Under 2.5',
       specifier: 'total=2.5',
-      desc: 'Over 2.5',
+      desc: 'Over/Under 2.5',
     },
     // BTTS
     {

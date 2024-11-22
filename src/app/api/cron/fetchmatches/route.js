@@ -62,11 +62,9 @@ export const GET = async () => {
         .toISOString()
         .split('T')[0];
 
-      if (matchDate === tomorrowStr || matchDate === dayAfterTomorrowStr) {
-        // Save with date-based key for easy retrieval
-        await saveMatchData(`match:${matchDate}:${match.eventId}`, match);
-      }
-    } 
+      // Save with date-based key for easy retrieval
+      await saveMatchData(`match:${matchDate}:${match.eventId}`, match);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
