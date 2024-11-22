@@ -79,7 +79,7 @@ export const GET = async () => {
   try {
     // Add cache busting timestamp
     const timestamp = Math.floor(Date.now() / 1000);
-    const url = `https://www.sportybet.com/api/ng/factsCenter/liveOrPrematchEvents?sportId=sr%3Asport%3A1&_t=${timestamp}`;
+    const url = `https://www.sportybet.com/api/ng/factsCenter/liveOrPrematchEvents?sportId=sr%3Asport%3A1&marketId=1%2C18%2C19%2C20%2C10%2C29%2C11%2C26%2C36%2C14%2C60100&_t=${timestamp}`;
 
     // Custom error for invalid URL
     if (!url) {
