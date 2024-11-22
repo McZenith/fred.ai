@@ -82,7 +82,8 @@ const renderTrend = (diff) => {
 };
 
 // Base OddsComparison component for 1X2
-const OddsComparison1X2 = ({ market, currentOdds, homeTeam, awayTeam }) => {
+const OddsComparison1X2 = ({ markets, currentOdds, homeTeam, awayTeam }) => {
+  const market = markets?.find((m) => m.id === '1');
   const findPreMatchOdds = (market) => {
     if (!market) return null;
 
@@ -893,7 +894,7 @@ const PredictionTab = ({
 
         {/* 1X2 Odds Comparison */}
         <OddsComparison1X2
-          market={market?.enrichedData?.prematchMarketData}
+          markets={market?.enrichedData?.prematchMarketData}
           currentOdds={getLiveOdds()}
           homeTeam={homeTeam}
           awayTeam={awayTeam}

@@ -307,12 +307,16 @@ const analyzeMatchMomentum = memoize(
   }
 );
 
-async function getMatches() {
+async function getPrematchData(matchId) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
   const res = await fetch(
-    `/api/match/${new Date().toISOString().split('T')[0]}`
+    `/api/match/prematchdata?matchId=${
+      tomorrow.toISOString().split('T')[0]
+    }:${matchId}`
   );
   const data = await res.json();
-  return data.matches;
+  return data.match;
 }
 
 // Export the optimized enrichment functions
@@ -380,18 +384,8 @@ export const enrichMatch = {
       const recommendation = generateRecommendation(stats, goalProbability);
 
       // Get prematch data
-      const data = await getMatches();
-      const tournamentDataPrematch = data?.data?.tournaments?.find(
-        (t) => t.id === tournamentId
-      );
-      const prematchData = tournamentDataPrematch?.events?.find(
-        (event) =>
-          (event.homeTeamName === match.homeTeamName &&
-            event.awayTeamName === match.awayTeamName) ||
-          (event.homeTeamId === match.homeTeamId &&
-            event.awayTeamId === match.awayTeamId)
-      );
-      const market = prematchData?.markets?.find((m) => m.id === '1');
+      const data = await getPrematchData(match.eventId);
+      const market = data?.markets;
 
       return {
         ...match,

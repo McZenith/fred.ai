@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import axios from 'axios';
 import { saveMatchData, getMatchData } from '@/utils/redis';
 
-export async function GET() {
+export const GET = async () => {
   try {
     // Get tomorrow's date in YYYY-MM-DD format
     const tomorrow = new Date();
@@ -13,11 +14,15 @@ export async function GET() {
     dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
     const dayAfterTomorrowStr = dayAfterTomorrow.toISOString().split('T')[0];
 
+    const baseUrl = process.env.VERCEL_URL
+      ? 'https://' + process.env.VERCEL_URL
+      : 'http://localhost:3000';
+
     // Fetch matches for tomorrow and day after
-    const response = await fetch('/api/getUpcomingData', {
+    const response = await axios.get(`${baseUrl}/api/getUpcomingData`, {
       cache: 'no-store',
     });
-    const result = await response.json();
+    const result = response.data;
 
     if (!result?.data) {
       return;
@@ -30,12 +35,10 @@ export async function GET() {
         .filter((tournament) => tournament && tournament.events)
         .flatMap((tournament) => {
           return Array.isArray(tournament.events)
-            ? tournament.events.map((event) =>
-                processMatchData({
-                  ...event,
-                  tournamentName: tournament.name || 'Unknown Tournament',
-                })
-              )
+            ? tournament.events.map((event) => ({
+                ...event,
+                tournamentName: tournament.name || 'Unknown Tournament',
+              }))
             : [];
         });
     } else if (result.data?.tournaments) {
@@ -43,33 +46,34 @@ export async function GET() {
         .filter((tournament) => tournament && tournament.events)
         .flatMap((tournament) => {
           return Array.isArray(tournament.events)
-            ? tournament.events.map((event) =>
-                processMatchData({
-                  ...event,
-                  tournamentName: tournament.name || 'Unknown Tournament',
-                })
-              )
+            ? tournament.events.map((event) => ({
+                ...event,
+                tournamentName: tournament.name || 'Unknown Tournament',
+              }))
             : [];
         });
     }
+
     const matches = flattenedData;
 
     // Process and save matches by date
-    for (const match of matches.data) {
-      const matchDate = new Date(match.startTime).toISOString().split('T')[0];
+    for (const match of matches) {
+      const matchDate = new Date(match.estimateStartTime)
+        .toISOString()
+        .split('T')[0];
 
       if (matchDate === tomorrowStr || matchDate === dayAfterTomorrowStr) {
         // Save with date-based key for easy retrieval
-        await saveMatchData(`match:${matchDate}:${match.id}`, match);
+        await saveMatchData(`match:${matchDate}:${match.eventId}`, match);
 
         // Also save to a date-index for easy listing
         const dateIndex = (await getMatchData(`date:${matchDate}`)) || [];
-        if (!dateIndex.includes(match.id)) {
-          dateIndex.push(match.id);
+        if (!dateIndex.includes(match.eventId)) {
+          dateIndex.push(match.eventId);
           await saveMatchData(`date:${matchDate}`, dateIndex);
         }
       }
-    }
+    } 
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -79,4 +83,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+};
