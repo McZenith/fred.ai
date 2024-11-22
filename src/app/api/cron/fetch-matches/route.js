@@ -19,7 +19,40 @@ export async function GET() {
     });
     const result = await response.json();
 
-    const matches = result.data;
+    if (!result?.data) {
+      return;
+    }
+
+    let flattenedData = [];
+
+    if (Array.isArray(result.data)) {
+      flattenedData = result.data
+        .filter((tournament) => tournament && tournament.events)
+        .flatMap((tournament) => {
+          return Array.isArray(tournament.events)
+            ? tournament.events.map((event) =>
+                processMatchData({
+                  ...event,
+                  tournamentName: tournament.name || 'Unknown Tournament',
+                })
+              )
+            : [];
+        });
+    } else if (result.data?.tournaments) {
+      flattenedData = (result.data.tournaments || [])
+        .filter((tournament) => tournament && tournament.events)
+        .flatMap((tournament) => {
+          return Array.isArray(tournament.events)
+            ? tournament.events.map((event) =>
+                processMatchData({
+                  ...event,
+                  tournamentName: tournament.name || 'Unknown Tournament',
+                })
+              )
+            : [];
+        });
+    }
+    const matches = flattenedData;
 
     // Process and save matches by date
     for (const match of matches.data) {
