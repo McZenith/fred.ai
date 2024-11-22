@@ -187,167 +187,223 @@ const ErrorMessage = ({ error }) =>
     </div>
   ) : null;
 
-const HomeContent = () => {
-  const [activeTab, setActiveTab] = useState('live');
-  const [copyMessage, setCopyMessage] = useState('');
-  const [isPending, startTransition] = useTransition();
-  const [isPaused, setIsPaused] = useState(false);
-  const prevDataRef = useRef({ live: [], upcoming: [] });
+  const HomeContent = () => {
+    const [activeTab, setActiveTab] = useState('live');
+    const [copyMessage, setCopyMessage] = useState('');
+    const [isPending, startTransition] = useTransition();
+    const [isPaused, setIsPaused] = useState(false);
+    const prevDataRef = useRef({ live: [], upcoming: [] });
+    const finishedMatchesTimeoutRef = useRef({});
 
-  const { isInCart, showCartOnly } = useCart();
-  const { applyFilters } = useFilter();
-  const {
-    liveData,
-    upcomingData,
-    isLoading,
-    isInitialFetch,
-    error,
-    refreshLiveData,
-    refreshUpcomingData,
-    pauseUpdates,
-    resumeUpdates,
-  } = useMatchData();
+    const { isInCart, showCartOnly } = useCart();
+    const { applyFilters } = useFilter();
+    const {
+      liveData,
+      upcomingData,
+      isLoading,
+      isInitialFetch,
+      error,
+      refreshLiveData,
+      refreshUpcomingData,
+      pauseUpdates,
+      resumeUpdates,
+      clearFinishedMatches,
+    } = useMatchData();
 
-  const handleTabChange = useCallback(
-    (tab) => {
-      startTransition(() => {
-        setActiveTab(tab);
-        if (tab === 'live') {
-          refreshLiveData();
+    // Clear timeouts on unmount
+    useEffect(() => {
+      return () => {
+        Object.values(finishedMatchesTimeoutRef.current).forEach((timeout) => {
+          clearTimeout(timeout);
+        });
+      };
+    }, []);
+
+    const handleTabChange = useCallback(
+      (tab) => {
+        startTransition(() => {
+          setActiveTab(tab);
+          if (tab === 'live') {
+            refreshLiveData();
+          } else {
+            refreshUpcomingData();
+          }
+        });
+      },
+      [refreshLiveData, refreshUpcomingData]
+    );
+
+    const handleTogglePause = useCallback(() => {
+      setIsPaused((prev) => {
+        const newState = !prev;
+        if (newState) {
+          pauseUpdates();
         } else {
-          refreshUpcomingData();
+          resumeUpdates();
         }
+        return newState;
       });
-    },
-    [refreshLiveData, refreshUpcomingData]
-  );
+    }, [pauseUpdates, resumeUpdates]);
 
-  const handleTogglePause = useCallback(() => {
-    setIsPaused((prev) => {
-      const newState = !prev;
-      if (newState) {
-        pauseUpdates();
-      } else {
-        resumeUpdates();
+    const clearAllFinishedMatches = useCallback(() => {
+      clearFinishedMatches();
+    }, [clearFinishedMatches]);
+
+    const filteredData = useMemo(() => {
+      const sourceData = activeTab === 'live' ? liveData : upcomingData;
+      const prevData =
+        activeTab === 'live'
+          ? prevDataRef.current.live
+          : prevDataRef.current.upcoming;
+
+      let filtered = sourceData;
+
+      // Handle finished matches
+      filtered = filtered.filter((event) => {
+        const matchStatus = event.matchStatus?.name?.toLowerCase() || '';
+        const isFinished =
+          matchStatus.includes('finished') ||
+          matchStatus.includes('ended') ||
+          matchStatus.includes('final') ||
+          matchStatus.includes('ft') ||
+          matchStatus === 'complete' ||
+          matchStatus === 'completed';
+
+        if (isFinished && !finishedMatchesTimeoutRef.current[event.eventId]) {
+          // Set a timeout to remove the match after 2 minutes
+          finishedMatchesTimeoutRef.current[event.eventId] = setTimeout(() => {
+            // Force a re-render to remove the match
+            refreshLiveData();
+            // Clean up the timeout reference
+            delete finishedMatchesTimeoutRef.current[event.eventId];
+          }, 120000); // 2 minutes
+        }
+
+        // Keep the match visible for 2 minutes after it finishes
+        return !isFinished || finishedMatchesTimeoutRef.current[event.eventId];
+      });
+
+      if (showCartOnly) {
+        filtered = filtered.filter((event) => isInCart(event.eventId));
       }
-      return newState;
-    });
-  }, [pauseUpdates, resumeUpdates]);
 
-  const filteredData = useMemo(() => {
-    const sourceData = activeTab === 'live' ? liveData : upcomingData;
-    const prevData =
-      activeTab === 'live'
-        ? prevDataRef.current.live
-        : prevDataRef.current.upcoming;
+      const result = applyFilters(filtered, isInCart);
 
-    let filtered = sourceData;
+      // Sort by match status and time
+      const sortedResult = result.sort((a, b) => {
+        // Priority to live matches
+        const aStatus = a.matchStatus?.name?.toLowerCase() || '';
+        const bStatus = b.matchStatus?.name?.toLowerCase() || '';
 
-    if (showCartOnly) {
-      filtered = filtered.filter((event) => isInCart(event.eventId));
-    }
+        // Finished matches go to the bottom
+        if (aStatus.includes('finished') && !bStatus.includes('finished'))
+          return 1;
+        if (bStatus.includes('finished') && !aStatus.includes('finished'))
+          return -1;
 
-    const result = applyFilters(filtered, isInCart);
+        // Live matches at the top
+        if (aStatus === 'live' && bStatus !== 'live') return -1;
+        if (bStatus === 'live' && aStatus !== 'live') return 1;
 
-    // Sort by match status and time
-    const sortedResult = result.sort((a, b) => {
-      // Priority to live matches
-      if (a.matchStatus?.name === 'LIVE' && b.matchStatus?.name !== 'LIVE')
-        return -1;
-      if (b.matchStatus?.name === 'LIVE' && a.matchStatus?.name !== 'LIVE')
-        return 1;
-
-      // Then by played time
-      return (b.playedSeconds || 0) - (a.playedSeconds || 0);
-    });
-
-    // Update previous data reference
-    if (activeTab === 'live') {
-      prevDataRef.current.live = sortedResult;
-    } else {
-      prevDataRef.current.upcoming = sortedResult;
-    }
-
-    return sortedResult;
-  }, [activeTab, liveData, upcomingData, showCartOnly, isInCart, applyFilters]);
-
-  const copyHomeTeams = useCallback(() => {
-    const dataToCopy = filteredData
-      ?.map((event) => event.homeTeamName)
-      .join('\n');
-
-    if (!dataToCopy?.length) {
-      setCopyMessage('No matches to copy.');
-      setTimeout(() => setCopyMessage(''), 3000);
-      return;
-    }
-
-    navigator.clipboard
-      .writeText(dataToCopy)
-      .then(() => {
-        setCopyMessage('Home teams copied!');
-        setTimeout(() => setCopyMessage(''), 3000);
-      })
-      .catch(() => {
-        setCopyMessage('Failed to copy.');
-        setTimeout(() => setCopyMessage(''), 3000);
+        // Then by played time
+        return (b.playedSeconds || 0) - (a.playedSeconds || 0);
       });
-  }, [filteredData]);
 
-  const showSkeletons = isInitialFetch || isPending;
-  const showNoMatches = !showSkeletons && filteredData.length === 0;
-  const showMatchList = !showSkeletons && filteredData.length > 0;
+      // Update previous data reference
+      if (activeTab === 'live') {
+        prevDataRef.current.live = sortedResult;
+      } else {
+        prevDataRef.current.upcoming = sortedResult;
+      }
 
-  return (
-    <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen'>
-      <div className='container mx-auto px-4 py-8'>
-        <h1 className='text-5xl font-bold text-center mb-8 text-blue-700'>
-          ⚽ Fred.ai
-        </h1>
+      return sortedResult;
+    }, [
+      activeTab,
+      liveData,
+      upcomingData,
+      showCartOnly,
+      isInCart,
+      applyFilters,
+      refreshLiveData,
+    ]);
 
-        {error && filteredData.length === 0 && <ErrorMessage error={error} />}
+    const copyHomeTeams = useCallback(() => {
+      const dataToCopy = filteredData
+        ?.map((event) => event.homeTeamName)
+        .join('\n');
 
-        <HeaderControls
-          activeTab={activeTab}
-          totalMatches={filteredData?.length || 0}
-          onTabChange={handleTabChange}
-          onCopyHomeTeams={copyHomeTeams}
-          copyMessage={copyMessage}
-          isPaused={isPaused}
-          onTogglePause={handleTogglePause}
-        />
+      if (!dataToCopy?.length) {
+        setCopyMessage('No matches to copy.');
+        setTimeout(() => setCopyMessage(''), 3000);
+        return;
+      }
 
-        <FilterBar />
+      navigator.clipboard
+        .writeText(dataToCopy)
+        .then(() => {
+          setCopyMessage('Home teams copied!');
+          setTimeout(() => setCopyMessage(''), 3000);
+        })
+        .catch(() => {
+          setCopyMessage('Failed to copy.');
+          setTimeout(() => setCopyMessage(''), 3000);
+        });
+    }, [filteredData]);
 
-        <div className='mt-4'>
-          {showSkeletons && (
-            <div>
-              {[...Array(3)].map((_, i) => (
-                <MatchCardSkeleton key={i} />
-              ))}
-            </div>
-          )}
+    const showSkeletons = isInitialFetch || isPending;
+    const showNoMatches = !showSkeletons && filteredData.length === 0;
+    const showMatchList = !showSkeletons && filteredData.length > 0;
 
-          {showNoMatches && (
-            <div className='text-center py-8 text-gray-500'>
-              {showCartOnly
-                ? 'No matches in cart'
-                : 'No matches found for the selected filters'}
-            </div>
-          )}
+    return (
+      <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen'>
+        <div className='container mx-auto px-4 py-8'>
+          <h1 className='text-5xl font-bold text-center mb-8 text-blue-700'>
+            ⚽ Fred.ai
+          </h1>
 
-          {showMatchList && (
-            <React.Suspense fallback={null}>
-              <MatchList matches={filteredData} />
-            </React.Suspense>
-          )}
+          {error && filteredData.length === 0 && <ErrorMessage error={error} />}
 
-          <LoadingOverlay show={isLoading && !isInitialFetch} />
+          <HeaderControls
+            activeTab={activeTab}
+            totalMatches={filteredData?.length || 0}
+            onTabChange={handleTabChange}
+            onCopyHomeTeams={copyHomeTeams}
+            copyMessage={copyMessage}
+            isPaused={isPaused}
+            onTogglePause={handleTogglePause}
+          />
+
+          <FilterBar />
+
+          <div className='mt-4'>
+            {showSkeletons && (
+              <div>
+                {[...Array(3)].map((_, i) => (
+                  <MatchCardSkeleton key={i} />
+                ))}
+              </div>
+            )}
+
+            {showNoMatches && (
+              <div className='text-center py-8 text-gray-500'>
+                {showCartOnly
+                  ? 'No matches in cart'
+                  : 'No matches found for the selected filters'}
+              </div>
+            )}
+
+            {showMatchList && (
+              <React.Suspense fallback={null}>
+                <MatchList matches={filteredData} />
+              </React.Suspense>
+            )}
+
+            <LoadingOverlay show={isLoading && !isInitialFetch} />
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 const Home = () => (
   <CartProvider>

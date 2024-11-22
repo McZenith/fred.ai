@@ -1,10 +1,10 @@
-// hooks/useMatchData.js
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { enrichMatch } from '@/utils/matchEnricher';
 
 export const useMatchData = () => {
   const [liveData, setLiveData] = useState([]);
   const [upcomingData, setUpcomingData] = useState([]);
+  const [finishedData, setFinishedData] = useState(new Set()); // Track finished match IDs
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialFetch, setIsInitialFetch] = useState(true);
   const [error, setError] = useState(null);
@@ -22,6 +22,18 @@ export const useMatchData = () => {
           match.enrichedData.analysis &&
           match.tournamentName
       )
+    );
+  }, []);
+
+  const isMatchFinished = useCallback((match) => {
+    const status = match.matchStatus?.name?.toLowerCase() || '';
+    return (
+      status.includes('finished') ||
+      status.includes('ended') ||
+      status.includes('final') ||
+      status.includes('ft') ||
+      status === 'complete' ||
+      status === 'completed'
     );
   }, []);
 
@@ -121,6 +133,11 @@ export const useMatchData = () => {
         });
       }
 
+      // Filter out already finished matches
+      flattenedData = flattenedData.filter(
+        (match) => !finishedData.has(match.eventId || match.matchId)
+      );
+
       if (isInitialFetch) {
         const initialEnriched = await Promise.all(
           flattenedData.map(async (match) => {
@@ -158,7 +175,16 @@ export const useMatchData = () => {
               match.enrichedData?.squads
           );
 
-          setLiveData(filteredData);
+          // Check for finished matches in initial data
+          filteredData.forEach((match) => {
+            if (isMatchFinished(match)) {
+              setFinishedData(
+                (prev) => new Set([...prev, match.eventId || match.matchId])
+              );
+            }
+          });
+
+          setLiveData(filteredData.filter((match) => !isMatchFinished(match)));
           previousDataRef.current.live = filteredData;
         }
         return;
@@ -206,8 +232,18 @@ export const useMatchData = () => {
               match.enrichedData?.timeline &&
               match.enrichedData?.matchInfo &&
               match.enrichedData?.odds &&
-              match.enrichedData?.squads
+              match.enrichedData?.squads &&
+              !isMatchFinished(match)
           );
+
+          // Update finished matches
+          sortedData.forEach((match) => {
+            if (isMatchFinished(match)) {
+              setFinishedData(
+                (prev) => new Set([...prev, match.eventId || match.matchId])
+              );
+            }
+          });
 
           // Only update if data has actually changed and updates aren't paused
           if (
@@ -229,7 +265,14 @@ export const useMatchData = () => {
       setIsLoading(false);
       setIsInitialFetch(false);
     }
-  }, [isInitialFetch, processMatchData, hasValidData, mergeMatchData]);
+  }, [
+    isInitialFetch,
+    processMatchData,
+    hasValidData,
+    mergeMatchData,
+    isMatchFinished,
+    finishedData,
+  ]);
 
   const fetchUpcomingData = useCallback(async () => {
     setIsLoading(true);
@@ -279,7 +322,8 @@ export const useMatchData = () => {
           (match) =>
             !match.ai &&
             !match.tournamentName?.toLowerCase().includes('srl') &&
-            !match.homeTeamName?.toLowerCase().includes('srl')
+            !match.homeTeamName?.toLowerCase().includes('srl') &&
+            !match.awayTeamName?.toLowerCase().includes('srl')
         );
 
         if (
@@ -301,7 +345,6 @@ export const useMatchData = () => {
     }
   }, [processMatchData, mergeMatchData]);
 
-  // Pause updates
   const pauseUpdates = useCallback(() => {
     isPausedRef.current = true;
     if (updateIntervalRef.current) {
@@ -310,13 +353,17 @@ export const useMatchData = () => {
     }
   }, []);
 
-  // Resume updates
   const resumeUpdates = useCallback(() => {
     isPausedRef.current = false;
     if (!updateIntervalRef.current) {
       updateIntervalRef.current = setInterval(fetchAndEnrichLiveData, 10000);
     }
   }, [fetchAndEnrichLiveData]);
+
+  // Clear finished matches
+  const clearFinishedMatches = useCallback(() => {
+    setFinishedData(new Set());
+  }, []);
 
   // Initial fetch
   useEffect(() => {
@@ -363,5 +410,6 @@ export const useMatchData = () => {
     refreshUpcomingData: fetchUpcomingData,
     pauseUpdates,
     resumeUpdates,
+    clearFinishedMatches,
   };
 };

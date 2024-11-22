@@ -299,7 +299,9 @@ import PredictionTab from './PredictionTab';
 
   // DetailStats with transition effects
   const DetailStats = React.memo(({ details, prevDetails }) => {
-    const [displayValues, setDisplayValues] = useState(details?.values);
+    const [displayValues, setDisplayValues] = useState(
+      () => details?.values || {}
+    );
     const [isTransitioning, setIsTransitioning] = useState(false);
 
     useEffect(() => {

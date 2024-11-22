@@ -288,6 +288,31 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
       {/* ... rest of the component ... */}
       <div className='overflow-x-auto'>
         <table className='w-full'>
+          <thead>
+            <tr className='bg-gray-100'>
+              <th className='px-4 py-2 text-left text-sm font-medium text-gray-700'>
+                Outcome
+              </th>
+              <th className='px-4 py-2 text-center text-sm font-medium text-gray-700'>
+                Pre-Match Odds
+              </th>
+              <th className='px-4 py-2 text-center text-sm font-medium text-gray-700'>
+                Live Odds
+              </th>
+              <th className='px-4 py-2 text-center text-sm font-medium text-gray-700'>
+                Trend
+              </th>
+              <th className='px-4 py-2 text-center text-sm font-medium text-gray-700'>
+                Pre-Match Probability (%)
+              </th>
+              <th className='px-4 py-2 text-center text-sm font-medium text-gray-700'>
+                Live Probability (%)
+              </th>
+              <th className='px-4 py-2 text-center text-sm font-medium text-gray-700'>
+                Trend Probability
+              </th>
+            </tr>
+          </thead>
           <tbody className='divide-y divide-gray-200'>
             {outcomes.map((outcome, idx) => {
               const pre = getMarketValue(prematchMarkets, outcome);
