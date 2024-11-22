@@ -26,16 +26,8 @@ export async function GET() {
       const matchDate = new Date(match.startTime).toISOString().split('T')[0];
 
       if (matchDate === tomorrowStr || matchDate === dayAfterTomorrowStr) {
-        const matchData = {
-          id: match.id,
-          prematchOdds: {
-            timestamp: Date.now(),
-            odds: match.markets,
-          },
-        };
-
         // Save with date-based key for easy retrieval
-        await saveMatchData(`match:${matchDate}:${match.id}`, matchData);
+        await saveMatchData(`match:${matchDate}:${match.id}`, match);
 
         // Also save to a date-index for easy listing
         const dateIndex = (await getMatchData(`date:${matchDate}`)) || [];
