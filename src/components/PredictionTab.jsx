@@ -14,41 +14,50 @@ import {
 import PropTypes from 'prop-types';
 
 // Utility function to get market values
-const getMarketValue = (markets, outcome, specifier = null) => {
-  // For total goals markets
-  const market = markets?.find((m) => {
-    if (specifier) {
-      return m.id === '18' || (m.id === '19' && m.specifier === specifier);
-    }
-    // For team totals
-    if (outcome.team === 'home') {
-      return m.id === '19' && m.specifier === outcome.specifier;
-    }
-    if (outcome.team === 'away') {
-      return m.id === '20' && m.specifier === outcome.specifier;
-    }
-    // For BTTS
-    if (outcome.type === 'btts') {
-      return m.id === '29';
-    }
-    return false;
-  });
-
+const getMarketValue = (markets, outcome) => {
+  let market;
   let probability = null;
   let odds = null;
 
-  if (market) {
-    const outcomeObj = market.outcomes.find((o) => {
-      if (outcome.type === 'btts') {
-        return o.desc === 'Yes';
-      }
-      return o.desc === outcome.desc;
-    });
-
-    if (outcomeObj) {
-      probability = parseFloat(outcomeObj.probability);
-      odds = parseFloat(outcomeObj.odds);
+  try {
+    // For total goals markets
+    if (outcome.type === 'total') {
+      market = markets?.find(
+        (m) => m.id === '18' && m.specifier === `total=${outcome.specifier}`
+      );
     }
+    // For team totals
+    else if (outcome.team) {
+      const marketId = outcome.team === 'home' ? '19' : '20';
+      // Important: Match the exact specifier format from the data
+      market = markets?.find(
+        (m) => m.id === marketId && m.specifier === `total=${outcome.specifier}`
+      );
+    }
+    // For BTTS
+    else if (outcome.type === 'btts') {
+      market = markets?.find((m) => m.id === '29');
+    }
+
+    if (market?.outcomes) {
+      // For BTTS specific handling
+      if (outcome.type === 'btts') {
+        const outcomeObj = market.outcomes.find((o) => o.desc === 'Yes');
+        if (outcomeObj) {
+          probability = parseFloat(outcomeObj.probability);
+          odds = parseFloat(outcomeObj.odds);
+        }
+      } else {
+        // For all other markets
+        const outcomeObj = market.outcomes.find((o) => o.desc === outcome.desc);
+        if (outcomeObj) {
+          probability = parseFloat(outcomeObj.probability);
+          odds = parseFloat(outcomeObj.odds);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error processing market value:', error);
   }
 
   return { odds, probability };
@@ -59,7 +68,6 @@ const calculateDiff = (current, previous) => {
   if (!current || !previous) return null;
   return ((current - previous) / previous) * 100;
 };
-
 // Utility function to render trend arrows
 const renderTrend = (diff) => {
   if (diff === null) return <Minus className='w-4 h-4 text-gray-400' />;
@@ -80,7 +88,6 @@ const renderTrend = (diff) => {
     </div>
   );
 };
-
 // Base OddsComparison component for 1X2
 const OddsComparison1X2 = ({ markets, currentOdds, homeTeam, awayTeam }) => {
   const market = markets?.find((m) => m.id === '1');
@@ -207,38 +214,40 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
     {
       name: 'Home Over 1.5',
       team: 'home',
-      specifier: 'total=1.5',
+      specifier: '1.5',
       desc: 'Over 1.5',
     },
     {
       name: 'Home Over 2.5',
       team: 'home',
-      specifier: 'total=2.5',
+      specifier: '2.5',
       desc: 'Over 2.5',
     },
     // Team totals - Away
     {
       name: 'Away Over 1.5',
       team: 'away',
-      specifier: 'total=1.5',
+      specifier: '1.5',
       desc: 'Over 1.5',
     },
     {
       name: 'Away Over 2.5',
       team: 'away',
-      specifier: 'total=2.5',
+      specifier: '2.5',
       desc: 'Over 2.5',
     },
     // Match totals
     {
       name: 'Over/Under 1.5',
-      specifier: 'total=1.5',
-      desc: 'Over/Under 1.5',
+      type: 'total',
+      specifier: '1.5',
+      desc: 'Over 1.5',
     },
     {
       name: 'Over/Under 2.5',
-      specifier: 'total=2.5',
-      desc: 'Over/Under 2.5',
+      type: 'total',
+      specifier: '2.5',
+      desc: 'Over 2.5',
     },
     // BTTS
     {
@@ -248,48 +257,49 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
     },
   ];
 
+  // Debug logging
+  React.useEffect(() => {
+    // Log the home team 2.5 market specifically
+    const homeOver25Pre = prematchMarkets?.find(
+      (m) => m.id === '19' && m.specifier === 'total=2.5'
+    );
+    const homeOver25Live = liveMarkets?.find(
+      (m) => m.id === '19' && m.specifier === 'total=2.5'
+    );
+
+    console.log('Home Over 2.5 Pre:', homeOver25Pre);
+    console.log('Home Over 2.5 Live:', homeOver25Live);
+  }, [prematchMarkets, liveMarkets]);
+
   return (
     <div className='bg-white rounded-lg shadow-sm border border-gray-100'>
-      <div className='p-4 border-b border-gray-100'>
-        <div className='flex items-center gap-2'>
-          <TrendingUp className='text-blue-600' size={20} />
-          <h3 className='text-lg font-semibold text-gray-900'>
-            Market Analysis
-          </h3>
-        </div>
-      </div>
-
+      {/* ... rest of the component ... */}
       <div className='overflow-x-auto'>
         <table className='w-full'>
-          <thead className='bg-gray-50'>
-            <tr>
-              <th className='px-4 py-3 text-left text-sm font-semibold text-gray-900 border-b'>
-                Market
-              </th>
-              <th className='px-4 py-3 text-center text-sm font-semibold text-gray-900 border-b'>
-                Pre-Match
-              </th>
-              <th className='px-4 py-3 text-center text-sm font-semibold text-gray-900 border-b'>
-                Live
-              </th>
-              <th className='px-4 py-3 text-center text-sm font-semibold text-gray-900 border-b'>
-                Change
-              </th>
-              <th className='px-4 py-3 text-center text-sm font-semibold text-gray-900 border-b'>
-                Pre Prob%
-              </th>
-              <th className='px-4 py-3 text-center text-sm font-semibold text-gray-900 border-b'>
-                Live Prob%
-              </th>
-              <th className='px-4 py-3 text-center text-sm font-semibold text-gray-900 border-b'>
-                Prob Change
-              </th>
-            </tr>
-          </thead>
           <tbody className='divide-y divide-gray-200'>
             {outcomes.map((outcome, idx) => {
               const pre = getMarketValue(prematchMarkets, outcome);
               const live = getMarketValue(liveMarkets, outcome);
+
+              // Debug log each market processing
+              if (outcome.name === 'Home Over 2.5') {
+                console.log('Processing Home Over 2.5:', {
+                  pre,
+                  live,
+                  outcome,
+                  preMarket: prematchMarkets?.find(
+                    (m) =>
+                      m.id === '19' &&
+                      m.specifier === `total=${outcome.specifier}`
+                  ),
+                  liveMarket: liveMarkets?.find(
+                    (m) =>
+                      m.id === '19' &&
+                      m.specifier === `total=${outcome.specifier}`
+                  ),
+                });
+              }
+
               const isTeamTotal =
                 outcome.team === 'home' || outcome.team === 'away';
               const isHomeMarket = outcome.team === 'home';
@@ -298,15 +308,15 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
                 <tr
                   key={idx}
                   className={`
-                  hover:bg-gray-50 
-                  ${
-                    isTeamTotal
-                      ? isHomeMarket
-                        ? 'bg-blue-50/30'
-                        : 'bg-red-50/30'
-                      : ''
-                  }
-                `}
+                    hover:bg-gray-50 
+                    ${
+                      isTeamTotal
+                        ? isHomeMarket
+                          ? 'bg-blue-50/30'
+                          : 'bg-red-50/30'
+                        : ''
+                    }
+                  `}
                 >
                   <td className='px-4 py-3 text-sm font-medium text-gray-900'>
                     {outcome.name}
@@ -336,38 +346,6 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
             })}
           </tbody>
         </table>
-      </div>
-
-      <div className='p-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-gray-100'>
-        <div className='p-3 bg-blue-50 rounded-lg'>
-          <div className='flex items-center gap-2 mb-1'>
-            <TrendingUp className='w-4 h-4 text-blue-600' />
-            <div className='text-sm font-medium text-gray-900'>
-              Value Markets
-            </div>
-          </div>
-          <div className='text-xs text-gray-600'>
-            Probability up, odds increased
-          </div>
-        </div>
-
-        <div className='p-3 bg-green-50 rounded-lg'>
-          <div className='flex items-center gap-2 mb-1'>
-            <ArrowUp className='w-4 h-4 text-green-600' />
-            <div className='text-sm font-medium text-gray-900'>
-              Strong Movement
-            </div>
-          </div>
-          <div className='text-xs text-gray-600'>Odds changed &gt;10%</div>
-        </div>
-
-        <div className='p-3 bg-red-50 rounded-lg'>
-          <div className='flex items-center gap-2 mb-1'>
-            <ArrowDown className='w-4 h-4 text-red-600' />
-            <div className='text-sm font-medium text-gray-900'>High Risk</div>
-          </div>
-          <div className='text-xs text-gray-600'>Largest probability drops</div>
-        </div>
       </div>
     </div>
   );
