@@ -65,13 +65,6 @@ export const GET = async () => {
       if (matchDate === tomorrowStr || matchDate === dayAfterTomorrowStr) {
         // Save with date-based key for easy retrieval
         await saveMatchData(`match:${matchDate}:${match.eventId}`, match);
-
-        // Also save to a date-index for easy listing
-        const dateIndex = (await getMatchData(`date:${matchDate}`)) || [];
-        if (!dateIndex.includes(match.eventId)) {
-          dateIndex.push(match.eventId);
-          await saveMatchData(`date:${matchDate}`, dateIndex);
-        }
       }
     } 
 
