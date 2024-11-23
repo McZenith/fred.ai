@@ -278,9 +278,6 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
     const homeOver25Live = liveMarkets?.find(
       (m) => m.id === '19' && m.specifier === 'total=2.5'
     );
-
-    console.log('Home Over 2.5 Pre:', homeOver25Pre);
-    console.log('Home Over 2.5 Live:', homeOver25Live);
   }, [prematchMarkets, liveMarkets]);
 
   return (
@@ -317,25 +314,6 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
             {outcomes.map((outcome, idx) => {
               const pre = getMarketValue(prematchMarkets, outcome);
               const live = getMarketValue(liveMarkets, outcome);
-
-              // Debug log each market processing
-              if (outcome.name === 'Home Over 2.5') {
-                console.log('Processing Home Over 2.5:', {
-                  pre,
-                  live,
-                  outcome,
-                  preMarket: prematchMarkets?.find(
-                    (m) =>
-                      m.id === '19' &&
-                      m.specifier === `total=${outcome.specifier}`
-                  ),
-                  liveMarket: liveMarkets?.find(
-                    (m) =>
-                      m.id === '19' &&
-                      m.specifier === `total=${outcome.specifier}`
-                  ),
-                });
-              }
 
               const isTeamTotal =
                 outcome.team === 'home' || outcome.team === 'away';

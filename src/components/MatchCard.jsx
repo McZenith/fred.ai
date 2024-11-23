@@ -246,9 +246,10 @@ import PredictionTab from './PredictionTab';
           isTransitioning ? 'opacity-0' : 'opacity-100'
         }`}
       >
-        <ResponsiveContainer width='100%' height='100%'>
+        <ResponsiveContainer>
           <AreaChart
             data={displayData}
+            style={{ width: '100%', height: '100%' }}
             margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
           >
             <defs>
@@ -411,8 +412,9 @@ import PredictionTab from './PredictionTab';
               isTransitioning ? 'opacity-0' : 'opacity-100'
             }`}
           >
-            <ResponsiveContainer width='100%' height='100%'>
+            <ResponsiveContainer>
               <AreaChart
+                style={{ width: '100%', height: '100%' }}
                 data={displayData}
                 margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
               >

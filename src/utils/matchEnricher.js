@@ -331,7 +331,6 @@ const analyzeMatchMomentum = memoize(
 
 async function getPrematchData(matchId) {
   const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
   const res = await fetch(
     `/api/match/prematchdata?matchId=${
       tomorrow.toISOString().split('T')[0]
@@ -356,25 +355,27 @@ export const enrichMatch = {
           fetchEndpoint(API_ROUTES.MATCH_INFO, { matchId }).catch(() => ({
             doc: [{ data: {} }],
           })),
-          fetchEndpoint(API_ROUTES.SQUADS, { matchId }).catch(() => ({
+          fetchEndpoint(API_ROUTES.MATCH_SQUADS, { matchId }).catch(() => ({
             doc: [{ data: {} }],
           })),
-          fetchEndpoint(API_ROUTES.ODDS, { matchId }).catch(() => ({
+          fetchEndpoint(API_ROUTES.MATCH_ODDS, { matchId }).catch(() => ({
             doc: [{ data: {} }],
           })),
-          fetchEndpoint(API_ROUTES.TIMELINE, { matchId }).catch(() => ({
+          fetchEndpoint(API_ROUTES.MATCH_TIMELINE, { matchId }).catch(() => ({
             doc: [{ data: { events: [] } }],
           })),
-          fetchEndpoint(API_ROUTES.TIMELINE_DELTA, { matchId }).catch(() => ({
+          fetchEndpoint(API_ROUTES.MATCH_TIMELINE_DELTA, { matchId }).catch(
+            () => ({
+              doc: [{ data: {} }],
+            })
+          ),
+          fetchEndpoint(API_ROUTES.MATCH_SITUATION, { matchId }).catch(() => ({
             doc: [{ data: {} }],
           })),
-          fetchEndpoint(API_ROUTES.SITUATION, { matchId }).catch(() => ({
-            doc: [{ data: {} }],
-          })),
-          fetchEndpoint(API_ROUTES.DETAILS, { matchId }).catch(() => ({
+          fetchEndpoint(API_ROUTES.MATCH_DETAILS, { matchId }).catch(() => ({
             doc: [{ data: { values: {} } }],
           })),
-          fetchEndpoint(API_ROUTES.PHRASES, { matchId }).catch(() => ({
+          fetchEndpoint(API_ROUTES.MATCH_PHRASES, { matchId }).catch(() => ({
             doc: [{ data: {} }],
           })),
         ]).catch(() => []),

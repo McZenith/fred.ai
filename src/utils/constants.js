@@ -52,4 +52,13 @@ export const API_ROUTES = {
   MATCH_SQUADS: '/api/match/squads',
   TEAM_VERSUS: '/api/team/versus',
   TEAM_FORM: '/api/team/form',
+  UPCOMING_DATA: '/api/getUpcomingData',
+  MATCH_DATA: '/api/match/data',
+  MATCH_STATS: '/api/match/stats',
+  MATCH_MOMENTUM: '/api/match/momentum',
+  MATCH_TIMELINE_DELTA: '/api/match/timelinedelta',
+  MATCH_SITUATION: '/api/match/situation',
+  MATCH_DETAILS: '/api/match/details',
+  MATCH_PHRASES: '/api/match/phrases',
+  ODDS: '/api/odds',
 };
