@@ -97,6 +97,48 @@ export const useMatchData = () => {
     return Array.from(mergedMap.values());
   }, []);
 
+  const updateFinishedMatches = useCallback(
+    (matches) => {
+      const newFinished = new Set();
+      matches.forEach((match) => {
+        if (isMatchFinished(match)) {
+          newFinished.add(match.eventId || match.matchId);
+        }
+      });
+
+      if (newFinished.size > 0) {
+        setFinishedData((prev) => new Set([...prev, ...newFinished]));
+      }
+    },
+    [isMatchFinished]
+  );
+
+  const filterLiveMatches = useCallback(
+    (matches) => {
+      return matches.filter(
+        (match) =>
+          !match.ai &&
+          !match.tournamentName?.toLowerCase().includes('srl') &&
+          !match.homeTeamName?.toLowerCase().includes('srl') &&
+          !match.awayTeamName?.toLowerCase().includes('srl') &&
+          match.tournamentName &&
+          match.enrichedData?.h2h &&
+          match.enrichedData?.form &&
+          match.enrichedData?.tournament &&
+          match.enrichedData?.details &&
+          match.enrichedData?.phrases &&
+          match.enrichedData?.situation &&
+          match.enrichedData?.timeline &&
+          match.enrichedData?.matchInfo &&
+          match.enrichedData?.odds &&
+          match.enrichedData?.squads &&
+          !isMatchFinished(match) &&
+          !finishedData.has(match.eventId || match.matchId)
+      );
+    },
+    [isMatchFinished, finishedData]
+  );
+
   const fetchAndEnrichLiveData = useCallback(async () => {
     if (isPausedRef.current) return;
 
@@ -133,11 +175,6 @@ export const useMatchData = () => {
         });
       }
 
-      // Filter out already finished matches
-      flattenedData = flattenedData.filter(
-        (match) => !finishedData.has(match.eventId || match.matchId)
-      );
-
       if (isInitialFetch) {
         const initialEnriched = await Promise.all(
           flattenedData.map(async (match) => {
@@ -156,35 +193,9 @@ export const useMatchData = () => {
         );
 
         if (hasValidData(initialEnriched)) {
-          const filteredData = initialEnriched.filter(
-            (match) =>
-              !match.ai &&
-              !match.tournamentName?.toLowerCase().includes('srl') &&
-              !match.homeTeamName?.toLowerCase().includes('srl') &&
-              !match.awayTeamName?.toLowerCase().includes('srl') &&
-              match.tournamentName &&
-              match.enrichedData?.h2h &&
-              match.enrichedData?.form &&
-              match.enrichedData?.tournament &&
-              match.enrichedData?.details &&
-              match.enrichedData?.phrases &&
-              match.enrichedData?.situation &&
-              match.enrichedData?.timeline &&
-              match.enrichedData?.matchInfo &&
-              match.enrichedData?.odds &&
-              match.enrichedData?.squads
-          );
-
-          // Check for finished matches in initial data
-          filteredData.forEach((match) => {
-            if (isMatchFinished(match)) {
-              setFinishedData(
-                (prev) => new Set([...prev, match.eventId || match.matchId])
-              );
-            }
-          });
-
-          setLiveData(filteredData.filter((match) => !isMatchFinished(match)));
+          updateFinishedMatches(initialEnriched);
+          const filteredData = filterLiveMatches(initialEnriched);
+          setLiveData(filteredData);
           previousDataRef.current.live = filteredData;
         }
         return;
@@ -216,34 +227,8 @@ export const useMatchData = () => {
 
       if (hasValidData(sortedData)) {
         setLiveData((prevData) => {
-          const filteredData = sortedData.filter(
-            (match) =>
-              !match.ai &&
-              !match.tournamentName?.toLowerCase().includes('srl') &&
-              !match.homeTeamName?.toLowerCase().includes('srl') &&
-              !match.awayTeamName?.toLowerCase().includes('srl') &&
-              match.tournamentName &&
-              match.enrichedData?.h2h &&
-              match.enrichedData?.form &&
-              match.enrichedData?.tournament &&
-              match.enrichedData?.details &&
-              match.enrichedData?.phrases &&
-              match.enrichedData?.situation &&
-              match.enrichedData?.timeline &&
-              match.enrichedData?.matchInfo &&
-              match.enrichedData?.odds &&
-              match.enrichedData?.squads &&
-              !isMatchFinished(match)
-          );
-
-          // Update finished matches
-          sortedData.forEach((match) => {
-            if (isMatchFinished(match)) {
-              setFinishedData(
-                (prev) => new Set([...prev, match.eventId || match.matchId])
-              );
-            }
-          });
+          updateFinishedMatches(sortedData);
+          const filteredData = filterLiveMatches(sortedData);
 
           // Only update if data has actually changed and updates aren't paused
           if (
@@ -270,8 +255,8 @@ export const useMatchData = () => {
     processMatchData,
     hasValidData,
     mergeMatchData,
-    isMatchFinished,
-    finishedData,
+    filterLiveMatches,
+    updateFinishedMatches,
   ]);
 
   const fetchUpcomingData = useCallback(async () => {
@@ -360,7 +345,6 @@ export const useMatchData = () => {
     }
   }, [fetchAndEnrichLiveData]);
 
-  // Clear finished matches
   const clearFinishedMatches = useCallback(() => {
     setFinishedData(new Set());
   }, []);

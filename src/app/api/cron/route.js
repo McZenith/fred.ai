@@ -1,19 +1,9 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
-import { saveMatchData, getMatchData } from '@/utils/redis';
+import { saveMatchData } from '@/utils/redis';
 
 export const GET = async () => {
   try {
-    // Get tomorrow's date in YYYY-MM-DD format
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-    // Get day after tomorrow
-    const dayAfterTomorrow = new Date();
-    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
-    const dayAfterTomorrowStr = dayAfterTomorrow.toISOString().split('T')[0];
-
     const baseUrl = process.env.VERCEL_URL
       ? 'https://' + process.env.VERCEL_URL
       : 'http://localhost:3000';
