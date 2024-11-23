@@ -1,117 +1,98 @@
 import { API_ROUTES } from './constants';
-// utils/matchEnricher.js
-const API_TIMEOUT = 3000; // 3 seconds timeout for API calls
 
-// Enhanced fetch helper with better error handling and fallbacks
-const fetchEndpoint = async (route, params = {}, retries = 2) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+const API_TIMEOUT = 3000;
+const BATCH_SIZE = 3; // Process 3 requests at a time
+const BATCH_INTERVAL = 100; // 100ms between batches
 
-  try {
-    const queryString = Object.entries(params)
-      .map(([key, value]) => `${key}=${value}`)
-      .join('&');
-
-    const response = await fetch(`${route}?${queryString}`, {
-      signal: controller.signal,
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        Pragma: 'no-cache',
-        Expires: '0',
-      },
-    }).catch((error) => {
-      throw new Error(`Network error: ${error.message}`);
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json().catch(() => null);
-    if (!data) {
-      throw new Error('Invalid JSON response');
-    }
-
-    return data;
-  } catch (error) {
-    clearTimeout(timeoutId);
-
-    if (error.name === 'AbortError') {
-      console.warn(`Request timeout for ${route}`);
-    }
-
-    if (retries > 0) {
-      // Exponential backoff
-      const backoffDelay = Math.min(1000 * 2 ** (2 - retries), 5000);
-      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
-      return fetchEndpoint(route, params, retries - 1);
-    }
-
-    // Return a safe fallback object instead of null
-    return {
-      doc: [
-        {
-          data: {
-            values: {},
-            events: [],
-            periods: [],
-            matches: [],
-            markets: [],
-          },
-        },
-      ],
-    };
+// Request Queue Implementation
+class RequestQueue {
+  constructor() {
+    this.queue = [];
+    this.processing = false;
+    this.cache = new Map();
   }
-};
 
-// Optimized parallel data fetching
-const fetchMatchDataParallel = async (matchId, dataTypes) => {
-  const requests = dataTypes.map((type) => {
-    const fetchFn = fetchMatchData[type];
-    return fetchFn?.(matchId).catch(() => null);
-  });
+  async add(requests) {
+    return new Promise((resolve) => {
+      this.queue.push({ requests, resolve });
+      this.process();
+    });
+  }
 
-  const results = await Promise.allSettled(requests);
+  async process() {
+    if (this.processing) return;
+    this.processing = true;
 
-  return results.reduce((acc, result, index) => {
-    if (result.status === 'fulfilled' && result.value) {
-      acc[dataTypes[index]] = result.value;
+    while (this.queue.length > 0) {
+      const { requests, resolve } = this.queue[0];
+      const results = [];
+
+      for (let i = 0; i < requests.length; i += BATCH_SIZE) {
+        const batch = requests.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (request) => {
+            const cacheKey = `${request.url}:${JSON.stringify(request.params)}`;
+
+            if (this.cache.has(cacheKey)) {
+              return this.cache.get(cacheKey);
+            }
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+
+            try {
+              const queryString = Object.entries(request.params)
+                .map(([key, value]) => `${key}=${value}`)
+                .join('&');
+
+              const response = await fetch(`${request.url}?${queryString}`, {
+                signal: controller.signal,
+                headers: {
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  Pragma: 'no-cache',
+                  Expires: '0',
+                },
+              });
+
+              clearTimeout(timeoutId);
+
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+
+              const data = await response.json();
+              this.cache.set(cacheKey, data);
+              return data;
+            } catch (error) {
+              clearTimeout(timeoutId);
+              console.warn(`Request failed for ${request.url}:`, error);
+              return request.fallback;
+            }
+          })
+        );
+
+        results.push(...batchResults);
+
+        if (i + BATCH_SIZE < requests.length) {
+          await new Promise((resolve) => setTimeout(resolve, BATCH_INTERVAL));
+        }
+      }
+
+      resolve(results);
+      this.queue.shift();
     }
-    return acc;
-  }, {});
-};
 
-// Optimized fetch functions with connection pooling
-const fetchMatchData = {
-  info: (matchId) =>
-    fetchEndpoint(API_ROUTES.MATCH_INFO, { matchId: String(matchId) }),
-  timeline: (matchId) =>
-    fetchEndpoint(API_ROUTES.MATCH_TIMELINE, { matchId: String(matchId) }),
-  timelineDelta: (matchId) =>
-    fetchEndpoint(API_ROUTES.MATCH_TIMELINE_DELTA, {
-      matchId: String(matchId),
-    }),
-  situation: (matchId) =>
-    fetchEndpoint(API_ROUTES.MATCH_SITUATION, { matchId: String(matchId) }),
-  details: (matchId) =>
-    fetchEndpoint(API_ROUTES.MATCH_DETAILS, { matchId: String(matchId) }),
-  phrases: (matchId) =>
-    fetchEndpoint(API_ROUTES.MATCH_PHRASES, { matchId: String(matchId) }),
-  odds: (matchId) =>
-    fetchEndpoint(API_ROUTES.MATCH_ODDS, { matchId: String(matchId) }),
-  squads: (matchId) =>
-    fetchEndpoint(API_ROUTES.MATCH_SQUADS, { matchId: String(matchId) }),
-};
+    this.processing = false;
+  }
 
-const fetchTeamData = {
-  versus: (teamId1, teamId2) =>
-    fetchEndpoint(API_ROUTES.TEAM_VERSUS, { teamId1, teamId2 }),
-  form: (teamId) => fetchEndpoint(API_ROUTES.TEAM_FORM, { teamId }),
-};
+  clearCache() {
+    this.cache.clear();
+  }
+}
 
-// Optimized analysis functions with memoization
+const requestQueue = new RequestQueue();
+
+// Helper Functions
 const memoize = (fn, ttl = 5000) => {
   const cache = new Map();
 
@@ -128,7 +109,6 @@ const memoize = (fn, ttl = 5000) => {
     return result;
   };
 };
-
 // utils/matchEnricher.js
 // Add these functions before the enrichMatch export
 
@@ -329,18 +309,34 @@ const analyzeMatchMomentum = memoize(
   }
 );
 
-async function getPrematchData(matchId) {
-  const tomorrow = new Date();
-  const res = await fetch(
-    `/api/match/prematchdata?matchId=${
-      tomorrow.toISOString().split('T')[0]
-    }:${matchId}`
-  );
-  const data = await res.json();
-  return data.match;
+async function fetchWithQueue(
+  route,
+  params,
+  fallback = { doc: [{ data: {} }] }
+) {
+  try {
+    const result = await requestQueue.add([
+      {
+        url: route,
+        params,
+        fallback,
+      },
+    ]);
+    return result[0];
+  } catch (error) {
+    console.warn(`Failed to fetch ${route}:`, error);
+    return fallback;
+  }
 }
 
-// Export the optimized enrichment functions
+async function getPrematchData(matchId) {
+  const tomorrow = new Date();
+  const result = await fetchWithQueue('/api/match/prematchdata', {
+    matchId: `${tomorrow.toISOString().split('T')[0]}:${matchId}`,
+  });
+  return result.match;
+}
+
 export const enrichMatch = {
   initial: async (match) => {
     try {
@@ -348,143 +344,93 @@ export const enrichMatch = {
       const tournamentId = match.sport?.category?.tournament?.id;
       const bracketsId = match.eventId;
 
-      // Add error boundaries around the parallel data fetching
-      const [matchData, teamData, tournamentData] = await Promise.allSettled([
-        // Match data fetching with fallbacks
-        Promise.all([
-          fetchEndpoint(API_ROUTES.MATCH_INFO, { matchId }).catch(() => ({
-            doc: [{ data: {} }],
-          })),
-          fetchEndpoint(API_ROUTES.MATCH_SQUADS, { matchId }).catch(() => ({
-            doc: [{ data: {} }],
-          })),
-          fetchEndpoint(API_ROUTES.MATCH_ODDS, { matchId }).catch(() => ({
-            doc: [{ data: {} }],
-          })),
-          fetchEndpoint(API_ROUTES.MATCH_TIMELINE, { matchId }).catch(() => ({
-            doc: [{ data: { events: [] } }],
-          })),
-          fetchEndpoint(API_ROUTES.MATCH_TIMELINE_DELTA, { matchId }).catch(
-            () => ({
-              doc: [{ data: {} }],
-            })
-          ),
-          fetchEndpoint(API_ROUTES.MATCH_SITUATION, { matchId }).catch(() => ({
-            doc: [{ data: {} }],
-          })),
-          fetchEndpoint(API_ROUTES.MATCH_DETAILS, { matchId }).catch(() => ({
-            doc: [{ data: { values: {} } }],
-          })),
-          fetchEndpoint(API_ROUTES.MATCH_PHRASES, { matchId }).catch(() => ({
-            doc: [{ data: {} }],
-          })),
-        ]).catch(() => []),
+      // Group requests by priority and batch them
+      const [essentialData, enrichmentData] = await Promise.all([
+        // Essential match data (first priority)
+        requestQueue.add([
+          {
+            url: API_ROUTES.MATCH_INFO,
+            params: { matchId },
+            fallback: { doc: [{ data: {} }] },
+          },
+          {
+            url: API_ROUTES.MATCH_DETAILS,
+            params: { matchId },
+            fallback: { doc: [{ data: { values: {} } }] },
+          },
+          {
+            url: API_ROUTES.MATCH_TIMELINE,
+            params: { matchId },
+            fallback: { doc: [{ data: { events: [] } }] },
+          },
+        ]),
 
-        // Team data fetching with fallbacks
-        Promise.all([
-          fetchEndpoint(API_ROUTES.TEAM_FORM, {
-            teamId: match.homeTeamId,
-          }).catch(() => ({ doc: [{ data: {} }] })),
-          fetchEndpoint(API_ROUTES.TEAM_FORM, {
-            teamId: match.awayTeamId,
-          }).catch(() => ({ doc: [{ data: {} }] })),
-          fetchEndpoint(API_ROUTES.TEAM_VERSUS, {
-            teamId1: match.homeTeamId,
-            teamId2: match.awayTeamId,
-          }).catch(() => ({ doc: [{ data: {} }] })),
-        ]).catch(() => []),
-
-        // Tournament data fetching with fallbacks
-        Promise.all([
-          fetchEndpoint(API_ROUTES.SEASON_META, { tournamentId }).catch(() => ({
-            doc: [{ data: {} }],
-          })),
-          fetchEndpoint(API_ROUTES.CUP_BRACKETS, { bracketsId }).catch(() => ({
-            doc: [{ data: {} }],
-          })),
-          fetchEndpoint(API_ROUTES.SEASON_GOALS, { tournamentId }).catch(
-            () => ({ doc: [{ data: {} }] })
-          ),
-          fetchEndpoint(API_ROUTES.SEASON_CARDS, { tournamentId }).catch(
-            () => ({ doc: [{ data: {} }] })
-          ),
-          fetchEndpoint(API_ROUTES.SEASON_TABLE, { tournamentId }).catch(
-            () => ({ doc: [{ data: {} }] })
-          ),
-        ]).catch(() => []),
+        // Enrichment data (second priority)
+        requestQueue.add([
+          {
+            url: API_ROUTES.MATCH_SITUATION,
+            params: { matchId },
+            fallback: { doc: [{ data: {} }] },
+          },
+          {
+            url: API_ROUTES.MATCH_TIMELINE_DELTA,
+            params: { matchId },
+            fallback: { doc: [{ data: {} }] },
+          },
+          {
+            url: API_ROUTES.TEAM_FORM,
+            params: { teamId: match.homeTeamId },
+            fallback: { doc: [{ data: {} }] },
+          },
+          {
+            url: API_ROUTES.TEAM_FORM,
+            params: { teamId: match.awayTeamId },
+            fallback: { doc: [{ data: {} }] },
+          },
+          {
+            url: API_ROUTES.TEAM_VERSUS,
+            params: { teamId1: match.homeTeamId, teamId2: match.awayTeamId },
+            fallback: { doc: [{ data: {} }] },
+          },
+        ]),
       ]);
 
-      // Safely extract data with fallbacks
-      const [matchDataResult, teamDataResult, tournamentDataResult] = [
-        matchData.status === 'fulfilled' ? matchData.value : [],
-        teamData.status === 'fulfilled' ? teamData.value : [],
-        tournamentData.status === 'fulfilled' ? tournamentData.value : [],
-      ];
+      const [matchInfo, details, timeline] = essentialData;
+      const [situation, timelineDelta, homeForm, awayForm, headToHead] =
+        enrichmentData;
 
-      const [
-        matchInfo = { doc: [{ data: {} }] },
-        squads = { doc: [{ data: {} }] },
-        odds = { doc: [{ data: {} }] },
-        timeline = { doc: [{ data: { events: [] } }] },
-        timelineDelta = { doc: [{ data: {} }] },
-        situation = { doc: [{ data: {} }] },
-        details = { doc: [{ data: { values: {} } }] },
-        phrases = { doc: [{ data: {} }] },
-      ] = matchDataResult;
-
-      const [
-        homeForm = { doc: [{ data: {} }] },
-        awayForm = { doc: [{ data: {} }] },
-        headToHead = { doc: [{ data: {} }] },
-      ] = teamDataResult;
-
-      const [
-        seasonMeta = { doc: [{ data: {} }] },
-        cupBrackets = { doc: [{ data: {} }] },
-        seasonGoals = { doc: [{ data: {} }] },
-        seasonCards = { doc: [{ data: {} }] },
-        seasonTable = { doc: [{ data: {} }] },
-      ] = tournamentDataResult;
-
-      // Process and analyze the enriched data with safe fallbacks
-      const mergedTimeline = {
-        complete: timeline?.doc?.[0]?.data || { events: [] },
-        delta: timelineDelta?.doc?.[0]?.data || {},
-      };
-
-      const momentum = analyzeMatchMomentum(
-        situation?.doc?.[0]?.data || { data: [] },
-        timelineDelta?.doc?.[0]?.data || {},
-        details?.doc?.[0]?.data || { values: {} },
-        mergedTimeline.complete
-      ) || { recent: { home: 0, away: 0 }, trend: [] };
-
-      const stats = calculateMatchStats(
-        details?.doc?.[0]?.data || { values: {} },
-        mergedTimeline.complete
-      ) || {
-        attacks: { home: 0, away: 0 },
-        dangerous: { home: 0, away: 0 },
-        possession: { home: 50, away: 50 },
-        shots: {
-          onTarget: { home: 0, away: 0 },
-          offTarget: { home: 0, away: 0 },
+      // Additional data in background
+      const additionalData = await requestQueue.add([
+        {
+          url: API_ROUTES.MATCH_SQUADS,
+          params: { matchId },
+          fallback: { doc: [{ data: {} }] },
         },
-        corners: { home: 0, away: 0 },
-        cards: { yellow: { home: 0, away: 0 }, red: { home: 0, away: 0 } },
-      };
+        {
+          url: API_ROUTES.MATCH_ODDS,
+          params: { matchId },
+          fallback: { doc: [{ data: {} }] },
+        },
+        {
+          url: API_ROUTES.MATCH_PHRASES,
+          params: { matchId },
+          fallback: { doc: [{ data: {} }] },
+        },
+        {
+          url: API_ROUTES.SEASON_META,
+          params: { tournamentId },
+          fallback: { doc: [{ data: {} }] },
+        },
+        {
+          url: API_ROUTES.SEASON_TABLE,
+          params: { tournamentId },
+          fallback: { doc: [{ data: {} }] },
+        },
+      ]);
 
-      const goalProbability = calculateGoalProbability(momentum, stats) || {
-        home: 0,
-        away: 0,
-      };
-      const recommendation = generateRecommendation(stats, goalProbability) || {
-        type: 'NO_PREDICTION',
-        confidence: 0,
-        reasons: ['Insufficient data'],
-      };
+      const [squads, odds, phrases, seasonMeta, seasonTable] = additionalData;
 
-      // Get prematch data with fallback
+      // Get prematch data
       let market = [];
       try {
         const data = await getPrematchData(match.eventId);
@@ -492,6 +438,27 @@ export const enrichMatch = {
       } catch (error) {
         console.warn('Failed to fetch prematch data:', error);
       }
+
+      // Process data
+      const mergedTimeline = {
+        complete: timeline?.doc?.[0]?.data || { events: [] },
+        delta: timelineDelta?.doc?.[0]?.data || {},
+      };
+
+      const momentum = analyzeMatchMomentum(
+        situation?.doc?.[0]?.data || { data: [] },
+        timelineDelta?.doc?.[0]?.data,
+        details?.doc?.[0]?.data,
+        mergedTimeline.complete
+      );
+
+      const stats = calculateMatchStats(
+        details?.doc?.[0]?.data,
+        mergedTimeline.complete
+      );
+
+      const goalProbability = calculateGoalProbability(momentum, stats);
+      const recommendation = generateRecommendation(stats, goalProbability);
 
       return {
         ...match,
@@ -506,10 +473,7 @@ export const enrichMatch = {
           },
           h2h: headToHead?.doc?.[0].data || {},
           tournament: {
-            cupBrackets: cupBrackets?.doc?.[0].data || {},
             seasonMeta: seasonMeta?.doc?.[0].data || {},
-            goals: seasonGoals?.doc?.[0].data || {},
-            cards: seasonCards?.doc?.[0].data || {},
             table: seasonTable?.doc?.[0].data || {},
           },
           situation: situation?.doc?.[0]?.data || {},
@@ -526,7 +490,6 @@ export const enrichMatch = {
       };
     } catch (error) {
       console.warn('Error in enrichMatch.initial:', error);
-      // Return match with safe fallback enriched data
       return {
         ...match,
         enrichedData: {
@@ -573,25 +536,46 @@ export const enrichMatch = {
     try {
       const matchId = match.eventId.toString().split(':').pop();
 
-      // Fetch only essential real-time data
-      const realtimeData = await fetchMatchDataParallel(matchId, [
-        'timeline',
-        'timelineDelta',
-        'situation',
-        'details',
+      const realtimeData = await Promise.all([
+        requestQueue.add([
+          {
+            url: API_ROUTES.MATCH_TIMELINE,
+            params: { matchId },
+            fallback: { doc: [{ data: { events: [] } }] },
+          },
+          {
+            url: API_ROUTES.MATCH_TIMELINE_DELTA,
+            params: { matchId },
+            fallback: { doc: [{ data: {} }] },
+          },
+        ]),
+        requestQueue.add([
+          {
+            url: API_ROUTES.MATCH_SITUATION,
+            params: { matchId },
+            fallback: { doc: [{ data: {} }] },
+          },
+          {
+            url: API_ROUTES.MATCH_DETAILS,
+            params: { matchId },
+            fallback: { doc: [{ data: { values: {} } }] },
+          },
+        ]),
       ]);
 
+      const [timeline, timelineDelta] = realtimeData[0];
+      const [situation, details] = realtimeData[1];
+
       const momentum = analyzeMatchMomentum(
-        realtimeData.situation?.doc?.[0]?.data || realtimeData.situation?.data,
-        realtimeData.timelineDelta?.doc?.[0]?.data ||
-          realtimeData.timelineDelta?.data,
-        realtimeData.details?.doc?.[0]?.data || realtimeData.details?.data,
-        realtimeData.timeline?.doc?.[0]?.data || realtimeData.timeline?.doc
+        situation?.doc?.[0]?.data,
+        timelineDelta?.doc?.[0]?.data,
+        details?.doc?.[0]?.data,
+        timeline?.doc?.[0]?.data
       );
 
       const stats = calculateMatchStats(
-        realtimeData.details?.doc?.[0]?.data || realtimeData.details?.data,
-        realtimeData.timeline?.doc?.[0]?.data || realtimeData.timeline?.doc
+        details?.doc?.[0]?.data,
+        timeline?.doc?.[0]?.data
       );
 
       const goalProbability = calculateGoalProbability(momentum, stats);
@@ -602,23 +586,11 @@ export const enrichMatch = {
         enrichedData: {
           ...match.enrichedData,
           timeline: {
-            complete:
-              realtimeData.timeline?.doc?.[0]?.data ||
-              realtimeData.timeline?.doc ||
-              null,
-            delta:
-              realtimeData.timelineDelta?.doc?.[0]?.data ||
-              realtimeData.timelineDelta?.data ||
-              null,
+            complete: timeline?.doc?.[0]?.data || null,
+            delta: timelineDelta?.doc?.[0]?.data || null,
           },
-          situation:
-            realtimeData.situation?.doc?.[0]?.data ||
-            realtimeData.situation?.doc ||
-            null,
-          details:
-            realtimeData.details?.doc?.[0]?.data ||
-            realtimeData.details?.doc ||
-            null,
+          situation: situation?.doc?.[0]?.data || null,
+          details: details?.doc?.[0]?.data || null,
           analysis: {
             momentum,
             stats,
@@ -633,3 +605,5 @@ export const enrichMatch = {
     }
   },
 };
+
+export default enrichMatch;

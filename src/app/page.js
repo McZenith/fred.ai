@@ -46,19 +46,7 @@ const StableMatchCard = React.memo(
     const resizeObserverRef = useRef(null);
     const prevEventRef = useRef(event);
 
-    const stableKey = useMemo(() => {
-      return JSON.stringify({
-        id: event.eventId,
-        score: event.setScore,
-        time: event.playedSeconds,
-        status: event.matchStatus?.name,
-        analysis: {
-          stats: event.enrichedData?.analysis?.stats,
-          momentum: event.enrichedData?.analysis?.momentum?.trend,
-          timeline: event.enrichedData?.analysis?.momentum?.timeline,
-        },
-      });
-    }, [event]);
+    const stableKey = useMemo(() => event._stableKey, [event._stableKey]);
 
     const [displayEvent, isTransitioning] = useDataTransition(
       event,
@@ -110,59 +98,13 @@ const StableMatchCard = React.memo(
       </div>
     );
   },
-  (prev, next) => {
-    if (prev.event === next.event) return true;
-
-    const essentialFields = [
-      'setScore',
-      'playedSeconds',
-      'matchStatus.name',
-      'enrichedData.analysis.stats',
-      'enrichedData.analysis.momentum.trend',
-      'enrichedData.analysis.momentum.timeline',
-      'enrichedData.details.values',
-      'markets',
-    ];
-
-    const getNestedValue = (obj, path) => {
-      return path.split('.').reduce((acc, part) => acc?.[part], obj);
-    };
-
-    return essentialFields.every((field) => {
-      const prevValue = getNestedValue(prev.event, field);
-      const nextValue = getNestedValue(next.event, field);
-
-      if (typeof prevValue === 'object' && prevValue !== null) {
-        return JSON.stringify(prevValue) === JSON.stringify(nextValue);
-      }
-
-      return prevValue === nextValue;
-    });
-  }
+  (prev, next) => prev.event._stableKey === next.event._stableKey
 );
 
 const MatchList = React.memo(({ matches }) => {
-  const prevMatchesRef = useRef(matches);
-
-  const stableMatches = useMemo(() => {
-    const hasSignificantChanges = matches.some((match, index) => {
-      const prevMatch = prevMatchesRef.current[index];
-      if (!prevMatch) return true;
-
-      return (
-        match.setScore !== prevMatch.setScore ||
-        match.playedSeconds !== prevMatch.playedSeconds ||
-        match.matchStatus?.name !== prevMatch.matchStatus?.name
-      );
-    });
-
-    prevMatchesRef.current = matches;
-    return hasSignificantChanges ? matches : prevMatchesRef.current;
-  }, [matches]);
-
   return (
     <div>
-      {stableMatches.map((event) => (
+      {matches.map((event) => (
         <StableMatchCard key={`${event.eventId}`} event={event} />
       ))}
     </div>
@@ -187,223 +129,153 @@ const ErrorMessage = ({ error }) =>
     </div>
   ) : null;
 
-  const HomeContent = () => {
-    const [activeTab, setActiveTab] = useState('live');
-    const [copyMessage, setCopyMessage] = useState('');
-    const [isPending, startTransition] = useTransition();
-    const [isPaused, setIsPaused] = useState(false);
-    const prevDataRef = useRef({ live: [], upcoming: [] });
-    const finishedMatchesTimeoutRef = useRef({});
+const HomeContent = () => {
+  const [activeTab, setActiveTab] = useState('live');
+  const [copyMessage, setCopyMessage] = useState('');
+  const [isPending, startTransition] = useTransition();
+  const [isPaused, setIsPaused] = useState(false);
 
-    const { isInCart, showCartOnly } = useCart();
-    const { applyFilters } = useFilter();
-    const {
-      liveData,
-      upcomingData,
-      isLoading,
-      isInitialFetch,
-      error,
-      refreshLiveData,
-      refreshUpcomingData,
-      pauseUpdates,
-      resumeUpdates,
-      clearFinishedMatches,
-    } = useMatchData();
+  const { isInCart, showCartOnly } = useCart();
+  const { applyFilters } = useFilter();
+  const {
+    liveData,
+    upcomingData,
+    isLoading,
+    isInitialFetch,
+    error,
+    refreshLiveData,
+    refreshUpcomingData,
+    pauseUpdates,
+    resumeUpdates,
+  } = useMatchData();
 
-    // Clear timeouts on unmount
-    useEffect(() => {
-      return () => {
-        Object.values(finishedMatchesTimeoutRef.current).forEach((timeout) => {
-          clearTimeout(timeout);
-        });
-      };
-    }, []);
-
-    const handleTabChange = useCallback(
-      (tab) => {
-        startTransition(() => {
-          setActiveTab(tab);
-          if (tab === 'live') {
-            refreshLiveData();
-          } else {
-            refreshUpcomingData();
-          }
-        });
-      },
-      [refreshLiveData, refreshUpcomingData]
-    );
-
-    const handleTogglePause = useCallback(() => {
-      setIsPaused((prev) => {
-        const newState = !prev;
-        if (newState) {
-          pauseUpdates();
+  const handleTabChange = useCallback(
+    (tab) => {
+      startTransition(() => {
+        setActiveTab(tab);
+        if (tab === 'live') {
+          refreshLiveData();
         } else {
-          resumeUpdates();
+          refreshUpcomingData();
         }
-        return newState;
       });
-    }, [pauseUpdates, resumeUpdates]);
+    },
+    [refreshLiveData, refreshUpcomingData]
+  );
 
-    const clearAllFinishedMatches = useCallback(() => {
-      clearFinishedMatches();
-    }, [clearFinishedMatches]);
-
-    const filteredData = useMemo(() => {
-      const sourceData = activeTab === 'live' ? liveData : upcomingData;
-      const prevData =
-        activeTab === 'live'
-          ? prevDataRef.current.live
-          : prevDataRef.current.upcoming;
-
-      let filtered = sourceData;
-
-      // Handle finished matches
-      filtered = filtered.filter((event) => {
-        const matchStatus = event.matchStatus?.name?.toLowerCase() || '';
-        const isFinished =
-          matchStatus.includes('finished') ||
-          matchStatus.includes('ended') ||
-          matchStatus.includes('final') ||
-          matchStatus.includes('ft') ||
-          matchStatus === 'complete' ||
-          matchStatus === 'completed';
-
-        if (isFinished && !finishedMatchesTimeoutRef.current[event.eventId]) {
-          // Set a timeout to remove the match after 2 minutes
-          finishedMatchesTimeoutRef.current[event.eventId] = setTimeout(() => {
-            // Force a re-render to remove the match
-            refreshLiveData();
-            // Clean up the timeout reference
-            delete finishedMatchesTimeoutRef.current[event.eventId];
-          }, 120000); // 2 minutes
-        }
-
-        // Keep the match visible for 2 minutes after it finishes
-        return !isFinished || finishedMatchesTimeoutRef.current[event.eventId];
-      });
-
-      if (showCartOnly) {
-        filtered = filtered.filter((event) => isInCart(event.eventId));
-      }
-
-      const result = applyFilters(filtered, isInCart);
-
-      // Sort by match status and time
-      const sortedResult = result.sort((a, b) => {
-        // Priority to live matches
-        const aStatus = a.matchStatus?.name?.toLowerCase() || '';
-        const bStatus = b.matchStatus?.name?.toLowerCase() || '';
-
-        // Finished matches go to the bottom
-        if (aStatus.includes('finished') && !bStatus.includes('finished'))
-          return 1;
-        if (bStatus.includes('finished') && !aStatus.includes('finished'))
-          return -1;
-
-        // Live matches at the top
-        if (aStatus === 'live' && bStatus !== 'live') return -1;
-        if (bStatus === 'live' && aStatus !== 'live') return 1;
-
-        // Then by played time
-        return (b.playedSeconds || 0) - (a.playedSeconds || 0);
-      });
-
-      // Update previous data reference
-      if (activeTab === 'live') {
-        prevDataRef.current.live = sortedResult;
+  const handleTogglePause = useCallback(() => {
+    setIsPaused((prev) => {
+      const newState = !prev;
+      if (newState) {
+        pauseUpdates();
       } else {
-        prevDataRef.current.upcoming = sortedResult;
+        resumeUpdates();
       }
+      return newState;
+    });
+  }, [pauseUpdates, resumeUpdates]);
 
-      return sortedResult;
-    }, [
-      activeTab,
-      liveData,
-      upcomingData,
-      showCartOnly,
-      isInCart,
-      applyFilters,
-      refreshLiveData,
-    ]);
+  const filteredData = useMemo(() => {
+    const sourceData = activeTab === 'live' ? liveData : upcomingData;
+    let filtered = sourceData;
 
-    const copyHomeTeams = useCallback(() => {
-      const dataToCopy = filteredData
-        ?.map((event) => event.homeTeamName)
-        .join('\n');
+    if (showCartOnly) {
+      filtered = filtered.filter((event) => isInCart(event.eventId));
+    }
 
-      if (!dataToCopy?.length) {
-        setCopyMessage('No matches to copy.');
+    const result = applyFilters(filtered, isInCart);
+
+    // Sort by match status and time
+    return result.sort((a, b) => {
+      const aStatus = a.matchStatus?.name?.toLowerCase() || '';
+      const bStatus = b.matchStatus?.name?.toLowerCase() || '';
+
+      // Live matches at the top
+      if (aStatus === 'live' && bStatus !== 'live') return -1;
+      if (bStatus === 'live' && aStatus !== 'live') return 1;
+
+      // Then by played time
+      return (b.playedSeconds || 0) - (a.playedSeconds || 0);
+    });
+  }, [activeTab, liveData, upcomingData, showCartOnly, isInCart, applyFilters]);
+
+  const copyHomeTeams = useCallback(() => {
+    const dataToCopy = filteredData
+      ?.map((event) => event.homeTeamName)
+      .join('\n');
+
+    if (!dataToCopy?.length) {
+      setCopyMessage('No matches to copy.');
+      setTimeout(() => setCopyMessage(''), 3000);
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(dataToCopy)
+      .then(() => {
+        setCopyMessage('Home teams copied!');
         setTimeout(() => setCopyMessage(''), 3000);
-        return;
-      }
+      })
+      .catch(() => {
+        setCopyMessage('Failed to copy.');
+        setTimeout(() => setCopyMessage(''), 3000);
+      });
+  }, [filteredData]);
 
-      navigator.clipboard
-        .writeText(dataToCopy)
-        .then(() => {
-          setCopyMessage('Home teams copied!');
-          setTimeout(() => setCopyMessage(''), 3000);
-        })
-        .catch(() => {
-          setCopyMessage('Failed to copy.');
-          setTimeout(() => setCopyMessage(''), 3000);
-        });
-    }, [filteredData]);
+  const showSkeletons = isInitialFetch || isPending;
+  const showNoMatches = !showSkeletons && filteredData.length === 0;
+  const showMatchList = !showSkeletons && filteredData.length > 0;
 
-    const showSkeletons = isInitialFetch || isPending;
-    const showNoMatches = !showSkeletons && filteredData.length === 0;
-    const showMatchList = !showSkeletons && filteredData.length > 0;
+  return (
+    <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen'>
+      <div className='container mx-auto px-4 py-8'>
+        <h1 className='text-5xl font-bold text-center mb-8 text-blue-700'>
+          ⚽ Fred.ai
+        </h1>
 
-    return (
-      <div className='bg-gradient-to-b from-blue-50 to-gray-100 min-h-screen'>
-        <div className='container mx-auto px-4 py-8'>
-          <h1 className='text-5xl font-bold text-center mb-8 text-blue-700'>
-            ⚽ Fred.ai
-          </h1>
+        {error && filteredData.length === 0 && <ErrorMessage error={error} />}
 
-          {error && filteredData.length === 0 && <ErrorMessage error={error} />}
+        <HeaderControls
+          activeTab={activeTab}
+          totalMatches={filteredData?.length || 0}
+          onTabChange={handleTabChange}
+          onCopyHomeTeams={copyHomeTeams}
+          copyMessage={copyMessage}
+          isPaused={isPaused}
+          onTogglePause={handleTogglePause}
+        />
 
-          <HeaderControls
-            activeTab={activeTab}
-            totalMatches={filteredData?.length || 0}
-            onTabChange={handleTabChange}
-            onCopyHomeTeams={copyHomeTeams}
-            copyMessage={copyMessage}
-            isPaused={isPaused}
-            onTogglePause={handleTogglePause}
-          />
+        <FilterBar />
 
-          <FilterBar />
+        <div className='mt-4'>
+          {showSkeletons && (
+            <div>
+              {[...Array(3)].map((_, i) => (
+                <MatchCardSkeleton key={i} />
+              ))}
+            </div>
+          )}
 
-          <div className='mt-4'>
-            {showSkeletons && (
-              <div>
-                {[...Array(3)].map((_, i) => (
-                  <MatchCardSkeleton key={i} />
-                ))}
-              </div>
-            )}
+          {showNoMatches && (
+            <div className='text-center py-8 text-gray-500'>
+              {showCartOnly
+                ? 'No matches in cart'
+                : 'No matches found for the selected filters'}
+            </div>
+          )}
 
-            {showNoMatches && (
-              <div className='text-center py-8 text-gray-500'>
-                {showCartOnly
-                  ? 'No matches in cart'
-                  : 'No matches found for the selected filters'}
-              </div>
-            )}
+          {showMatchList && (
+            <React.Suspense fallback={null}>
+              <MatchList matches={filteredData} />
+            </React.Suspense>
+          )}
 
-            {showMatchList && (
-              <React.Suspense fallback={null}>
-                <MatchList matches={filteredData} />
-              </React.Suspense>
-            )}
-
-            <LoadingOverlay show={isLoading && !isInitialFetch} />
-          </div>
+          <LoadingOverlay show={isLoading && !isInitialFetch} />
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
 const Home = () => (
   <CartProvider>
