@@ -26,10 +26,8 @@ export const useMatchData = () => {
   }, []);
 
   const isMatchFinished = useCallback((match) => {
-    return (
-      match.enrichedData?.analysis?.timeline?.delta.match?.status ===
-      'recentlyended'
-    );
+    const currentTime = parseInt(match.playedSeconds.split(':')[0]);
+    return currentTime >= 90;
   }, []);
 
   const processMatchData = useCallback((match, initialData = null) => {

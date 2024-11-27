@@ -6,7 +6,7 @@ export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([]);
   const [showCartOnly, setShowCartOnly] = useState(false);
 
-  const addToCart = (event) => {
+  const addToCart = (event, teamType) => {
     setCart((prev) => [
       ...prev,
       {
@@ -15,6 +15,9 @@ export const CartProvider = ({ children }) => {
         awayTeamName: event.awayTeamName,
         matchTime: event.estimateStartTime,
         tournament: event.sport?.category?.tournament?.name,
+        selectedTeam: teamType, // 'home' or 'away'
+        selectedTeamName:
+          teamType === 'home' ? event.homeTeamName : event.awayTeamName,
       },
     ]);
   };
@@ -30,6 +33,15 @@ export const CartProvider = ({ children }) => {
 
   const isInCart = (eventId) => cart.some((item) => item.eventId === eventId);
 
+  const getSelectedTeamType = (eventId) => {
+    const match = cart.find((item) => item.eventId === eventId);
+    return match?.selectedTeam || null;
+  };
+
+  const getSelectedTeams = () => {
+    return cart.map((item) => item.selectedTeamName);
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -40,6 +52,8 @@ export const CartProvider = ({ children }) => {
         removeFromCart,
         clearCart,
         isInCart,
+        getSelectedTeamType,
+        getSelectedTeams,
       }}
     >
       {children}
@@ -54,4 +68,3 @@ export const useCart = () => {
   }
   return context;
 };
-

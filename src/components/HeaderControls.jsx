@@ -13,13 +13,13 @@ export const HeaderControls = ({
   activeTab,
   totalMatches,
   onTabChange,
-  onCopyHomeTeams,
   copyMessage,
   isPaused,
   onTogglePause,
 }) => {
   const { cart, showCartOnly, setShowCartOnly, clearCart } = useCart();
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [localCopyMessage, setLocalCopyMessage] = useState('');
 
   // Handle scroll visibility
   useEffect(() => {
@@ -36,6 +36,25 @@ export const HeaderControls = ({
       top: 0,
       behavior: 'smooth',
     });
+  };
+
+  const handleCopySelectedTeams = async () => {
+    if (cart.length === 0) {
+      setLocalCopyMessage('No teams in cart');
+      setTimeout(() => setLocalCopyMessage(''), 3000);
+      return;
+    }
+
+    const teamsToCopy = cart.map((item) => item.selectedTeamName);
+
+    try {
+      await navigator.clipboard.writeText(teamsToCopy.join('\n'));
+      setLocalCopyMessage('Selected teams copied!');
+      setTimeout(() => setLocalCopyMessage(''), 3000);
+    } catch (err) {
+      setLocalCopyMessage('Failed to copy teams');
+      setTimeout(() => setLocalCopyMessage(''), 3000);
+    }
   };
 
   return (
@@ -74,11 +93,11 @@ export const HeaderControls = ({
               )}
             </button>
             <button
-              onClick={onCopyHomeTeams}
+              onClick={handleCopySelectedTeams}
               className='py-2 px-4 rounded-lg font-semibold transition-colors duration-300 bg-blue-600 text-white hover:bg-blue-700 flex items-center'
             >
               <FaClipboard className='mr-2' />
-              Copy Home Teams
+              Copy Selected Teams
             </button>
             <button
               onClick={onTogglePause}
@@ -125,12 +144,13 @@ export const HeaderControls = ({
             )}
           </div>
         </div>
-        {copyMessage && (
-          <p className='mt-2 text-sm text-green-500'>{copyMessage}</p>
+        {(localCopyMessage || copyMessage) && (
+          <p className='mt-2 text-sm text-green-500'>
+            {localCopyMessage || copyMessage}
+          </p>
         )}
       </div>
 
-      {/* Scroll to top button */}
       {showScrollTop && (
         <button
           onClick={scrollToTop}

@@ -726,7 +726,11 @@ import PredictionTab from './PredictionTab';
     const [expanded, setExpanded] = useState(false);
     const [activeTab, setActiveTab] = useState('prediction');
     const [isPending, startTransition] = useTransition();
-    const { addToCart, removeFromCart, isInCart } = useCart();
+    const { addToCart, removeFromCart, isInCart, getSelectedTeamType } =
+      useCart();
+    const [selectedTeamType, setSelectedTeamType] = useState(
+      getSelectedTeamType(event.eventId)
+    );
 
     const prevValuesRef = useRef({
       stats: event?.enrichedData?.analysis?.stats,
@@ -869,6 +873,45 @@ import PredictionTab from './PredictionTab';
                 Round {event.round}
               </Badge>
             )}
+          </div>
+          <div className='flex gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => handleTeamSelect('home')}
+              className={`relative transition-all duration-300 ${
+                selectedTeamType === 'home'
+                  ? 'bg-blue-50 text-blue-600 hover:bg-red-50 hover:text-red-600'
+                  : 'bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-blue-600'
+              }`}
+            >
+              <div className='flex items-center gap-2'>
+                <ShoppingCart size={16} />
+                <span>Home</span>
+              </div>
+              {selectedTeamType === 'home' && (
+                <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full ring-2 ring-white animate-pulse' />
+              )}
+            </Button>
+
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => handleTeamSelect('away')}
+              className={`relative transition-all duration-300 ${
+                selectedTeamType === 'away'
+                  ? 'bg-red-50 text-red-600 hover:bg-red-50 hover:text-red-600'
+                  : 'bg-gray-50 text-gray-600 hover:bg-red-50 hover:text-red-600'
+              }`}
+            >
+              <div className='flex items-center gap-2'>
+                <ShoppingCart size={16} />
+                <span>Away</span>
+              </div>
+              {selectedTeamType === 'away' && (
+                <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full ring-2 ring-white animate-pulse' />
+              )}
+            </Button>
           </div>
           <Button
             variant='outline'
@@ -1123,6 +1166,22 @@ import PredictionTab from './PredictionTab';
         </div>
       ),
       // Add other tab content similarly
+    };
+
+    const handleTeamSelect = (teamType) => {
+      if (isInCart(event.eventId)) {
+        if (getSelectedTeamType(event.eventId) === teamType) {
+          removeFromCart(event.eventId);
+          setSelectedTeamType(null);
+        } else {
+          removeFromCart(event.eventId);
+          addToCart(event, teamType);
+          setSelectedTeamType(teamType);
+        }
+      } else {
+        addToCart(event, teamType);
+        setSelectedTeamType(teamType);
+      }
     };
 
     return (
