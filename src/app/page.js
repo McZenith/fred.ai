@@ -152,7 +152,7 @@ const HomeContent = () => {
 
   useEffect(() => {
     // Clear finished matches periodically (e.g., every 30 minutes)
-    const cleanupInterval = setInterval(clearFinishedMatches, 1800000); // 30 minutes
+    const cleanupInterval = setInterval(clearFinishedMatches, 180000); // 30 minutes
 
     return () => {
       clearInterval(cleanupInterval);
