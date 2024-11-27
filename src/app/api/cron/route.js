@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
-import { saveMatchData } from '@/utils/redis';
+import { saveMatchesData } from '@/utils/redis';
 
 export const GET = async () => {
   try {
@@ -8,7 +8,6 @@ export const GET = async () => {
       ? 'https://' + process.env.VERCEL_URL
       : 'http://localhost:3000';
 
-    // Fetch matches for tomorrow and day after
     const response = await axios.get(`${baseUrl}/api/getUpcomingData`, {
       cache: 'no-store',
     });
@@ -44,17 +43,8 @@ export const GET = async () => {
         });
     }
 
-    const matches = flattenedData;
-
-    // Process and save matches by date
-    for (const match of matches) {
-      const matchDate = new Date(match.estimateStartTime)
-        .toISOString()
-        .split('T')[0];
-
-      // Save with date-based key for easy retrieval
-      await saveMatchData(`match:${matchDate}:${match.eventId}`, match);
-    }
+    // Single call to save all matches
+    await saveMatchesData(flattenedData);
 
     return NextResponse.json({ success: true });
   } catch (error) {

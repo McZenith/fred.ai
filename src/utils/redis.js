@@ -6,10 +6,20 @@ const redis = new Redis({
   password: 'SqyHZTbPHADrkAOk9W5eTetxWFqENRQY',
 });
 
-export const saveMatchData = async (key, data) => {
-  await redis.set(key, JSON.stringify(data));
-  // Set 48hr expiry
-  await redis.expire(key, 48 * 60 * 60);
+export const saveMatchesData = async (matches) => {
+  const pipeline = redis.pipeline();
+
+  for (const match of matches) {
+    const matchDate = new Date(match.estimateStartTime)
+      .toISOString()
+      .split('T')[0];
+    const key = `match:${matchDate}:${match.eventId}`;
+
+    pipeline.set(key, JSON.stringify(match));
+    pipeline.expire(key, 48 * 60 * 60); // 48hr expiry
+  }
+
+  await pipeline.exec();
 };
 
 export const getMatchData = async (key) => {
