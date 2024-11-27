@@ -145,14 +145,26 @@ const HomeContent = () => {
     error,
     refreshLiveData,
     refreshUpcomingData,
+    clearFinishedMatches,
     pauseUpdates,
     resumeUpdates,
   } = useMatchData();
+
+  useEffect(() => {
+    // Clear finished matches periodically (e.g., every 30 minutes)
+    const cleanupInterval = setInterval(clearFinishedMatches, 1800000); // 30 minutes
+
+    return () => {
+      clearInterval(cleanupInterval);
+    };
+  }, [clearFinishedMatches]);
 
   const handleTabChange = useCallback(
     (tab) => {
       startTransition(() => {
         setActiveTab(tab);
+        clearFinishedMatches();
+
         if (tab === 'live') {
           refreshLiveData();
         } else {

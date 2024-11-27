@@ -26,14 +26,9 @@ export const useMatchData = () => {
   }, []);
 
   const isMatchFinished = useCallback((match) => {
-    const status = match.matchStatus?.name?.toLowerCase() || '';
     return (
-      status.includes('finished') ||
-      status.includes('ended') ||
-      status.includes('final') ||
-      status.includes('ft') ||
-      status === 'complete' ||
-      status === 'completed'
+      match.enrichedData?.analysis?.timeline?.delta.match?.status ===
+      'recentlyended'
     );
   }, []);
 
