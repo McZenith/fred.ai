@@ -16,7 +16,7 @@ export const saveMatchesData = async (matches) => {
     const key = `match:${matchDate}:${match.eventId}`;
 
     pipeline.set(key, JSON.stringify(match));
-    pipeline.expire(key, 48 * 60 * 60); // 48hr expiry
+    pipeline.expire(key, 25 * 60 * 60); // 48hr expiry
   }
 
   await pipeline.exec();
