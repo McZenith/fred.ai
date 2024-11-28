@@ -913,26 +913,6 @@ import PredictionTab from './PredictionTab';
               )}
             </Button>
           </div>
-          <Button
-            variant='outline'
-            size='icon'
-            onClick={handleToggle}
-            className={`rounded-full p-3 relative transition-all duration-300 ${
-              isInCart(event.eventId)
-                ? 'bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-600'
-                : 'bg-gray-50 text-gray-600 hover:bg-green-50 hover:text-green-600'
-            }`}
-          >
-            <ShoppingCart
-              size={20}
-              className={`transition-transform duration-300 ${
-                isInCart(event.eventId) ? 'scale-110' : 'scale-100'
-              }`}
-            />
-            {isInCart(event.eventId) && (
-              <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full ring-2 ring-white animate-pulse' />
-            )}
-          </Button>
         </div>
 
         <div className='flex items-center justify-between gap-4 p-6 bg-white rounded-xl shadow-sm min-h-[180px]'>
