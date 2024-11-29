@@ -31,41 +31,11 @@ export const useMatchData = () => {
   }, []);
 
   const processMatchData = useCallback(async (match, initialData = null) => {
-    const getPrematchData = async (matchId) => {
-      try {
-        const today = new Date();
-        const eventId = `${today.toISOString().split('T')[0]}:${matchId}`;
-        const queryString = Object.entries({ matchId: eventId })
-          .map(([key, value]) => `${key}=${value}`)
-          .join('&');
-
-        const result = await fetch(`/api/match/prematchdata?${queryString}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!result.ok) {
-          throw new Error(`HTTP error! status: ${result.status}`);
-        }
-
-        const data = await result.json();
-        return data.match || undefined;
-      } catch (error) {}
-    };
-
-    const prematchData = match.enrichedData?.prematchMarketData
-      ? match.enrichedData?.prematchMarketData
-      : await getPrematchData(match.eventId || match.matchId); // Fetch prematch data
-    const prematchMarketData = prematchData?.markets || []; // Extract market data
-
     return {
       ...match,
       enrichedData: {
         ...initialData?.enrichedData,
         ...match.enrichedData,
-        prematchMarketData: prematchMarketData, // Store prematchMarketData in enrichedData
       },
       _stableKey: JSON.stringify({
         id: match.eventId || match.matchId,
@@ -201,6 +171,40 @@ export const useMatchData = () => {
       if (isInitialFetch) {
         const initialEnriched = await Promise.all(
           flattenedData.map(async (match) => {
+            const getPrematchData = async (matchId) => {
+              try {
+                const today = new Date();
+                const eventId = `${
+                  today.toISOString().split('T')[0]
+                }:${matchId}`;
+                const queryString = Object.entries({ matchId: eventId })
+                  .map(([key, value]) => `${key}=${value}`)
+                  .join('&');
+
+                const result = await fetch(
+                  `/api/match/prematchdata?${queryString}`,
+                  {
+                    method: 'GET',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                  }
+                );
+
+                if (!result.ok) {
+                  throw new Error(`HTTP error! status: ${result.status}`);
+                }
+
+                const data = await result.json();
+                return data.match || undefined;
+              } catch (error) {}
+            };
+
+            const prematchData = match.enrichedData?.prematchMarketData
+              ? match.enrichedData?.prematchMarketData
+              : await getPrematchData(match.eventId || match.matchId);
+            const prematchMarketData = prematchData?.markets || [];
+
             const [initialData, realtimeData] = await Promise.all([
               enrichMatch.initial(match),
               enrichMatch.realtime(match),
@@ -208,6 +212,7 @@ export const useMatchData = () => {
             return processMatchData({
               ...match,
               enrichedData: {
+                prematchMarketData: prematchMarketData,
                 ...initialData?.enrichedData,
                 ...realtimeData?.enrichedData,
               },
