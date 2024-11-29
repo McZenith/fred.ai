@@ -269,17 +269,6 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
     },
   ];
 
-  // Debug logging
-  React.useEffect(() => {
-    // Log the home team 2.5 market specifically
-    const homeOver25Pre = prematchMarkets?.find(
-      (m) => m.id === '19' && m.specifier === 'total=2.5'
-    );
-    const homeOver25Live = liveMarkets?.find(
-      (m) => m.id === '19' && m.specifier === 'total=2.5'
-    );
-  }, [prematchMarkets, liveMarkets]);
-
   return (
     <div className='bg-white rounded-lg shadow-sm border border-gray-100'>
       {/* ... rest of the component ... */}
@@ -368,9 +357,7 @@ const AdditionalMarketsComparison = ({ prematchMarkets, liveMarkets }) => {
 
 const PredictionTab = ({
   details,
-  liveMarkets,
   market,
-  tournament,
   h2h,
   form,
   homeGoals = 0,
@@ -417,8 +404,8 @@ const PredictionTab = ({
   };
 
   // Get live odds
-  const getLiveOdds = () => {
-    const market = liveMarkets?.['0']?.outcomes;
+  const getLiveOdds = (markets) => {
+    const market = markets?.['0']?.outcomes;
     if (!market) return null;
 
     return {
@@ -888,7 +875,7 @@ const PredictionTab = ({
         {/* 1X2 Odds Comparison */}
         <OddsComparison1X2
           markets={market?.enrichedData?.prematchMarketData}
-          currentOdds={getLiveOdds()}
+          currentOdds={getLiveOdds(market?.markets)}
           homeTeam={homeTeam}
           awayTeam={awayTeam}
         />
@@ -896,7 +883,7 @@ const PredictionTab = ({
         {/* Additional Markets Analysis */}
         <AdditionalMarketsComparison
           prematchMarkets={market?.enrichedData?.prematchMarketData}
-          liveMarkets={liveMarkets}
+          liveMarkets={market?.markets}
         />
 
         {/* Score and Timeline Display */}
@@ -1031,8 +1018,6 @@ PredictionTab.propTypes = {
   events: PropTypes.array,
   homeTeam: PropTypes.string,
   awayTeam: PropTypes.string,
-  liveMarkets: PropTypes.object,
-  tournament: PropTypes.object,
 };
 
 export default PredictionTab;

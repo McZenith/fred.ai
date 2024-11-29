@@ -1131,7 +1131,6 @@ import PredictionTab from './PredictionTab';
             </div>
             <PredictionTab
               details={details}
-              liveMarkets={event?.markets}
               market={event}
               h2h={h2h}
               form={event?.enrichedData?.form}
@@ -1140,7 +1139,6 @@ import PredictionTab from './PredictionTab';
               events={event?.enrichedData?.timeline?.complete?.events}
               homeTeam={event.homeTeamName}
               awayTeam={event.awayTeamName}
-              tournament={event.sport.category.tournament.name}
             />
           </div>
         </div>

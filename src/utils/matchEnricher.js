@@ -309,40 +309,11 @@ const analyzeMatchMomentum = memoize(
   }
 );
 
-async function fetchWithQueue(
-  route,
-  params,
-  fallback = { doc: [{ data: {} }] }
-) {
-  try {
-    const result = await requestQueue.add([
-      {
-        url: route,
-        params,
-        fallback,
-      },
-    ]);
-    return result[0];
-  } catch (error) {
-    console.warn(`Failed to fetch ${route}:`, error);
-    return fallback;
-  }
-}
-
-async function getPrematchData(matchId) {
-  const tomorrow = new Date();
-  const result = await fetchWithQueue('/api/match/prematchdata', {
-    matchId: `${tomorrow.toISOString().split('T')[0]}:${matchId}`,
-  });
-  return result.match;
-}
-
 export const enrichMatch = {
   initial: async (match) => {
     try {
       const matchId = match.eventId.toString().split(':').pop();
       const tournamentId = match.sport?.category?.tournament?.id;
-      const bracketsId = match.eventId;
 
       // Group requests by priority and batch them
       const [essentialData, enrichmentData] = await Promise.all([
@@ -430,15 +401,6 @@ export const enrichMatch = {
 
       const [squads, odds, phrases, seasonMeta, seasonTable] = additionalData;
 
-      // Get prematch data
-      let market = [];
-      try {
-        const data = await getPrematchData(match.eventId);
-        market = data?.markets || [];
-      } catch (error) {
-        console.warn('Failed to fetch prematch data:', error);
-      }
-
       // Process data
       const mergedTimeline = {
         complete: timeline?.doc?.[0]?.data || { events: [] },
@@ -479,7 +441,6 @@ export const enrichMatch = {
           situation: situation?.doc?.[0]?.data || {},
           details: details?.doc?.[0]?.data || { values: {} },
           phrases: phrases?.doc?.[0]?.data || {},
-          prematchMarketData: market,
           analysis: {
             momentum,
             stats,
