@@ -9,6 +9,7 @@ export const filterOptions = [
   { value: 'halftime', label: 'Half Time' },
   { value: 'highProbability', label: 'High Probability' },
   { value: 'inCart', label: 'In Cart' },
+  { value: 'over0.5', label: 'Over 0.5' },
   { value: 'over1.5', label: 'Over 1.5' },
   { value: 'over2.5', label: 'Over 2.5' },
   { value: 'over3.5', label: 'Over 3.5' },

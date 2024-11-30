@@ -30,6 +30,13 @@ export const filterPredicates = {
     return isInCart(event.eventId);
   },
 
+  'over0.5': (event) => {
+    const [homeScore, awayScore] = (event.setScore || '0:0')
+      .split(':')
+      .map(Number);
+    return homeScore + awayScore > 0.5;
+  },
+
   'over1.5': (event) => {
     const [homeScore, awayScore] = (event.setScore || '0:0')
       .split(':')
