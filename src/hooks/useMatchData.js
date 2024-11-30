@@ -31,44 +31,11 @@ export const useMatchData = () => {
   }, []);
 
   const processMatchData = useCallback(async (match, initialData = null) => {
-    let prematchMarketData = [];
-    const getPrematchData = async (matchId) => {
-      try {
-        const today = new Date();
-        const eventId = `${today.toISOString().split('T')[0]}:${matchId}`;
-        const queryString = Object.entries({ matchId: eventId })
-          .map(([key, value]) => `${key}=${value}`)
-          .join('&');
-
-        const result = await fetch(`/api/match/prematchdata?${queryString}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!result.ok) {
-          throw new Error(`HTTP error! status: ${result.status}`);
-        }
-
-        const data = await result.json();
-        return data.match || undefined;
-      } catch (error) {}
-    };
-
-    if (isInitialFetch) {
-      const prematchData = await getPrematchData(
-        match.eventId || match.matchId
-      ); // Fetch prematch data
-      prematchMarketData = prematchData?.markets || []; // Extract market data
-    }
-
     return {
       ...match,
       enrichedData: {
         ...initialData?.enrichedData,
         ...match.enrichedData,
-        prematchMarketData: prematchMarketData, // Store prematchMarketData in enrichedData
       },
       _stableKey: JSON.stringify({
         id: match.eventId || match.matchId,
@@ -422,4 +389,28 @@ export const useMatchData = () => {
     resumeUpdates,
     clearFinishedMatches,
   };
+};
+
+export const getPrematchData = async (matchId) => {
+  try {
+    const today = new Date();
+    const eventId = `${today.toISOString().split('T')[0]}:${matchId}`;
+    const queryString = Object.entries({ matchId: eventId })
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&');
+
+    const result = await fetch(`/api/match/prematchdata?${queryString}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!result.ok) {
+      throw new Error(`HTTP error! status: ${result.status}`);
+    }
+
+    const data = await result.json();
+    return data.match || undefined;
+  } catch (error) {}
 };

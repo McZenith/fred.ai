@@ -1,15 +1,17 @@
 import { API_ROUTES } from './constants';
+import { getPrematchData } from '../hooks/useMatchData';
 
 const API_TIMEOUT = 3000;
 const BATCH_SIZE = 3; // Process 3 requests at a time
 const BATCH_INTERVAL = 100; // 100ms between batches
+
+const prematchDataCache = {}; // Cache object
 
 // Request Queue Implementation
 class RequestQueue {
   constructor() {
     this.queue = [];
     this.processing = false;
-    this.cache = new Map();
   }
 
   async add(requests) {
@@ -31,12 +33,6 @@ class RequestQueue {
         const batch = requests.slice(i, i + BATCH_SIZE);
         const batchResults = await Promise.all(
           batch.map(async (request) => {
-            const cacheKey = `${request.url}:${JSON.stringify(request.params)}`;
-
-            if (this.cache.has(cacheKey)) {
-              return this.cache.get(cacheKey);
-            }
-
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
 
@@ -61,7 +57,6 @@ class RequestQueue {
               }
 
               const data = await response.json();
-              this.cache.set(cacheKey, data);
               return data;
             } catch (error) {
               clearTimeout(timeoutId);
@@ -84,32 +79,11 @@ class RequestQueue {
 
     this.processing = false;
   }
-
-  clearCache() {
-    this.cache.clear();
-  }
 }
 
 const requestQueue = new RequestQueue();
 
 // Helper Functions
-const memoize = (fn, ttl = 5000) => {
-  const cache = new Map();
-
-  return (...args) => {
-    const key = JSON.stringify(args);
-    const cached = cache.get(key);
-
-    if (cached && Date.now() - cached.timestamp < ttl) {
-      return cached.value;
-    }
-
-    const result = fn(...args);
-    cache.set(key, { value: result, timestamp: Date.now() });
-    return result;
-  };
-};
-// utils/matchEnricher.js
 // Add these functions before the enrichMatch export
 
 const calculateMatchStats = (details, completeTimeline) => {
@@ -270,50 +244,56 @@ const generateRecommendation = (stats, probability) => {
   return recommendation;
 };
 
-const analyzeMatchMomentum = memoize(
-  (situation, timelineDelta, details, completeTimeline) => {
-    if (!situation?.data) return null;
+const analyzeMatchMomentum = (
+  situation,
+  timelineDelta,
+  details,
+  completeTimeline
+) => {
+  if (!situation?.data) return null;
 
-    const lastMinutes = situation.data.slice(-5);
-    const momentum = {
-      recent: lastMinutes.reduce(
-        (acc, minute) => ({
-          home:
-            acc.home +
-            (minute.home.dangerouscount * 2 + minute.home.attackcount),
-          away:
-            acc.away +
-            (minute.away.dangerouscount * 2 + minute.away.attackcount),
-        }),
-        { home: 0, away: 0 }
-      ),
-      delta: timelineDelta?.match?.result || null,
-      trend: lastMinutes.map((minute) => ({
-        minute: minute.time,
-        homeIntensity: minute.home.dangerouscount + minute.home.attackcount,
-        awayIntensity: minute.away.dangerouscount + minute.away.attackcount,
-      })),
-      timeline: completeTimeline || null,
-    };
+  const lastMinutes = situation.data.slice(-5);
+  const momentum = {
+    recent: lastMinutes.reduce(
+      (acc, minute) => ({
+        home:
+          acc.home + (minute.home.dangerouscount * 2 + minute.home.attackcount),
+        away:
+          acc.away + (minute.away.dangerouscount * 2 + minute.away.attackcount),
+      }),
+      { home: 0, away: 0 }
+    ),
+    delta: timelineDelta?.match?.result || null,
+    trend: lastMinutes.map((minute) => ({
+      minute: minute.time,
+      homeIntensity: minute.home.dangerouscount + minute.home.attackcount,
+      awayIntensity: minute.away.dangerouscount + minute.away.attackcount,
+    })),
+    timeline: completeTimeline || null,
+  };
 
-    const possession = details?.values?.['110']?.value || {
-      home: 50,
-      away: 50,
-    };
-    momentum.possession = {
-      home: parseInt(possession.home) || 50,
-      away: parseInt(possession.away) || 50,
-    };
+  const possession = details?.values?.['110']?.value || {
+    home: 50,
+    away: 50,
+  };
+  momentum.possession = {
+    home: parseInt(possession.home) || 50,
+    away: parseInt(possession.away) || 50,
+  };
 
-    return momentum;
-  }
-);
+  return momentum;
+};
 
 export const enrichMatch = {
   initial: async (match) => {
     try {
       const matchId = match.eventId.toString().split(':').pop();
       const tournamentId = match.sport?.category?.tournament?.id;
+
+      // Fetch prematch data and save to cache
+      let prematchData = await getPrematchData(match.eventId);
+      prematchDataCache[match.eventId] = prematchData; // Store in cache
+      let prematchMarketData = prematchData?.markets || [];
 
       // Group requests by priority and batch them
       const [essentialData, enrichmentData] = await Promise.all([
@@ -425,6 +405,7 @@ export const enrichMatch = {
       return {
         ...match,
         enrichedData: {
+          prematchMarketData: [...prematchMarketData],
           matchInfo: matchInfo?.doc?.[0].data || {},
           squads: squads?.doc?.[0].data || {},
           odds: odds?.doc?.[0].data || {},
@@ -454,6 +435,7 @@ export const enrichMatch = {
       return {
         ...match,
         enrichedData: {
+          prematchMarketData: [],
           matchInfo: {},
           squads: {},
           odds: {},
@@ -464,7 +446,6 @@ export const enrichMatch = {
           situation: {},
           details: { values: {} },
           phrases: {},
-          prematchMarketData: [],
           analysis: {
             momentum: { recent: { home: 0, away: 0 }, trend: [] },
             stats: {
@@ -496,6 +477,15 @@ export const enrichMatch = {
   realtime: async (match) => {
     try {
       const matchId = match.eventId.toString().split(':').pop();
+
+      // Check cache before fetching
+      let prematchData = prematchDataCache[match.eventId];
+      if (!prematchData) {
+        prematchData = await getPrematchData(match.eventId);
+        prematchDataCache[match.eventId] = prematchData; // Store in cache
+      }
+
+      let prematchMarketData = prematchData?.markets || [];
 
       const realtimeData = await Promise.all([
         requestQueue.add([
@@ -546,6 +536,7 @@ export const enrichMatch = {
         ...match,
         enrichedData: {
           ...match.enrichedData,
+          prematchMarketData: [...prematchMarketData],
           timeline: {
             complete: timeline?.doc?.[0]?.data || null,
             delta: timelineDelta?.doc?.[0]?.data || null,

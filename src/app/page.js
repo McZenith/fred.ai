@@ -42,7 +42,7 @@ const MatchCardSkeleton = () => (
 const StableMatchCard = React.memo(
   ({ event }) => {
     const cardRef = useRef(null);
-    const [minHeight, setMinHeight] = useState('auto');
+    const [minHeight, setMinHeight] = useState('100%');
     const resizeObserverRef = useRef(null);
     const prevEventRef = useRef(event);
 
@@ -79,7 +79,7 @@ const StableMatchCard = React.memo(
     }, [event]);
 
     useEffect(() => {
-      setMinHeight('auto');
+      setMinHeight('100%');
     }, [stableKey]);
 
     return (
