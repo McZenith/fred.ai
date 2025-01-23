@@ -8,7 +8,7 @@ const SIGNALR_CONFIG = {
   KEEP_ALIVE_INTERVAL: 15000,
   CLIENT_TIMEOUT_INTERVAL: 45000,
   SERVER_TIMEOUT: 60000,
-  PING_INTERVAL: 30000, // Adjusted to 30 seconds for more frequent pings
+  PING_INTERVAL: 5000,
   MAX_ATTEMPTS: 10, // Increased max attempts
   CLIENT_ID_KEY: 'signalr_client_id',
   CLIENT_ID_TIMESTAMP_KEY: 'signalr_client_id_timestamp',
@@ -84,10 +84,9 @@ class SignalRManager {
       const clientId = await this.getClientId();
       this.messageHandler = messageHandler;
 
-      // Stop the previous connection if it exists
       if (this.connection) {
-        await this.connection.stop(); // Ensure the previous connection is stopped
-        this.connection = null; // Clear the reference
+        await this.connection.stop();
+        this.connection = null;
       }
 
       const connection = new signalR.HubConnectionBuilder()
