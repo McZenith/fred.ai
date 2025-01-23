@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { enrichMatch } from '@/utils/matchEnricher';
 import * as signalR from '@microsoft/signalr';
 
-import { useSignalRConnection } from '@/hooks/useSignalRConnection';
 
 export const useMatchData = () => {
   // State management
@@ -305,13 +304,6 @@ export const useMatchData = () => {
     }
   }, [processMatchData, mergeMatchData]);
 
-  const {
-    signalRData,
-    isSignalRConnected,
-    pauseUpdates: pauseUpdate,
-    resumeUpdates: resumeUpdate,
-  } = useSignalRConnection();
-
   // Update the cleanup effect
   useEffect(() => {
     return () => {
@@ -405,7 +397,6 @@ export const useMatchData = () => {
     pauseUpdates,
     resumeUpdates,
     clearFinishedMatches,
-    isSignalRConnected,
   };
 };
 

@@ -11,6 +11,7 @@ import React, {
 import { CartProvider, useCart } from '@/hooks/useCart';
 import { FilterProvider, useFilter } from '@/hooks/filterContext';
 import { useMatchData } from '@/hooks/useMatchData';
+import { useSignalRConnection } from '@/hooks/useSignalRConnection';
 import MatchCard, { useDataTransition } from '@/components/MatchCard';
 import { HeaderControls } from '@/components/HeaderControls';
 import { FilterBar } from '@/components/FilterBar';
@@ -149,6 +150,13 @@ const HomeContent = () => {
     pauseUpdates,
     resumeUpdates,
   } = useMatchData();
+
+  const {
+    signalRData,
+    isSignalRConnected,
+    pauseUpdates: pauseUpdate,
+    resumeUpdates: resumeUpdate,
+  } = useSignalRConnection();
 
   useEffect(() => {
     // Clear finished matches periodically (e.g., every 30 minutes)
