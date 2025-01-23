@@ -408,7 +408,9 @@ export const enrichMatch = {
           prematchMarketData: [...prematchMarketData],
           matchInfo: matchInfo?.doc?.[0].data || {},
           squads: squads?.doc?.[0].data || {},
-          odds: odds?.doc?.[0].data || {},
+          odds:
+            odds?.doc?.[0].data[match.eventId.toString().split(':').pop()] ||
+            {},
           timeline: mergedTimeline,
           form: {
             home: homeForm?.doc?.[0].data || {},
@@ -499,6 +501,11 @@ export const enrichMatch = {
             params: { matchId },
             fallback: { doc: [{ data: {} }] },
           },
+          {
+            url: API_ROUTES.MATCH_ODDS,
+            params: { matchId },
+            fallback: { doc: [{ data: {} }] },
+          },
         ]),
         requestQueue.add([
           {
@@ -514,7 +521,7 @@ export const enrichMatch = {
         ]),
       ]);
 
-      const [timeline, timelineDelta] = realtimeData[0];
+      const [timeline, timelineDelta, odds] = realtimeData[0];
       const [situation, details] = realtimeData[1];
 
       const momentum = analyzeMatchMomentum(
@@ -536,6 +543,9 @@ export const enrichMatch = {
         ...match,
         enrichedData: {
           ...match.enrichedData,
+          odds:
+            odds?.doc?.[0].data[match.eventId.toString().split(':').pop()] ||
+            {},
           prematchMarketData: [...prematchMarketData],
           timeline: {
             complete: timeline?.doc?.[0]?.data || null,

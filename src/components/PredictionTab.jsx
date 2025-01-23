@@ -858,6 +858,133 @@ const PredictionTab = ({
     );
   };
 
+  const overrideOddsWithLiveData = (prematchMarkets, liveData) => {
+    if (!liveData?.data || !prematchMarkets) return prematchMarkets;
+
+    // Get the first market data object from live data
+    const liveMarketData = Object.values(liveData.data)[0];
+
+    return prematchMarkets.map((market) => {
+      const updatedMarket = { ...market };
+
+      // Handle 1X2 market (ID: 1)
+      if (market.id === '1' && liveMarketData[17]) {
+        const liveOdds = liveMarketData[17].outcomes;
+        updatedMarket.outcomes = market.outcomes.map((outcome) => {
+          const newOutcome = { ...outcome };
+          if (outcome.desc === 'Home') {
+            newOutcome.odds = liveOdds[1]?.odds || outcome.odds;
+          } else if (outcome.desc === 'Draw') {
+            newOutcome.odds = liveOdds[2]?.odds || outcome.odds;
+          } else if (outcome.desc === 'Away') {
+            newOutcome.odds = liveOdds[3]?.odds || outcome.odds;
+          }
+          return newOutcome;
+        });
+      }
+
+      // Handle Over/Under markets (ID: 18)
+      else if (market.id === '18' && market.specifier && liveMarketData[18]) {
+        const totalValue = market.specifier.split('=')[1];
+        const liveMarket = liveMarketData[18];
+
+        if (liveMarket.hcp?.value === totalValue) {
+          updatedMarket.outcomes = market.outcomes.map((outcome) => {
+            const newOutcome = { ...outcome };
+            if (outcome.desc.includes('Over')) {
+              newOutcome.odds = liveMarket.outcomes[2]?.odds || outcome.odds;
+            } else if (outcome.desc.includes('Under')) {
+              newOutcome.odds = liveMarket.outcomes[3]?.odds || outcome.odds;
+            }
+            return newOutcome;
+          });
+        }
+      }
+
+      // Handle Home Team Over/Under (ID: 19)
+      else if (market.id === '19' && market.specifier && liveMarketData[19]) {
+        const liveMarket = liveMarketData[19];
+        const totalValue = market.specifier.split('=')[1];
+
+        if (liveMarket.hcp?.value === totalValue) {
+          updatedMarket.outcomes = market.outcomes.map((outcome) => {
+            const newOutcome = { ...outcome };
+            if (outcome.desc.includes('Over')) {
+              newOutcome.odds = liveMarket.outcomes[2]?.odds || outcome.odds;
+            } else if (outcome.desc.includes('Under')) {
+              newOutcome.odds = liveMarket.outcomes[3]?.odds || outcome.odds;
+            }
+            return newOutcome;
+          });
+        }
+      }
+
+      // Handle Away Team Over/Under (ID: 20)
+      else if (market.id === '20' && market.specifier && liveMarketData[20]) {
+        const liveMarket = liveMarketData[20];
+        const totalValue = market.specifier.split('=')[1];
+
+        if (liveMarket.hcp?.value === totalValue) {
+          updatedMarket.outcomes = market.outcomes.map((outcome) => {
+            const newOutcome = { ...outcome };
+            if (outcome.desc.includes('Over')) {
+              newOutcome.odds = liveMarket.outcomes[2]?.odds || outcome.odds;
+            } else if (outcome.desc.includes('Under')) {
+              newOutcome.odds = liveMarket.outcomes[3]?.odds || outcome.odds;
+            }
+            return newOutcome;
+          });
+        }
+      }
+
+      // Handle BTTS/Goal-No Goal (ID: 29)
+      else if (market.id === '29' && liveMarketData[128]) {
+        const liveOdds = liveMarketData[128].outcomes;
+        updatedMarket.outcomes = market.outcomes.map((outcome) => {
+          const newOutcome = { ...outcome };
+          if (outcome.desc === 'Yes') {
+            newOutcome.odds = liveOdds[0]?.odds || outcome.odds;
+          } else if (outcome.desc === 'No') {
+            newOutcome.odds = liveOdds[1]?.odds || outcome.odds;
+          }
+          return newOutcome;
+        });
+      }
+
+      // Handle Double Chance (ID: 10)
+      else if (market.id === '10' && liveMarketData[20]) {
+        const liveOdds = liveMarketData[20].outcomes;
+        updatedMarket.outcomes = market.outcomes.map((outcome) => {
+          const newOutcome = { ...outcome };
+          if (outcome.desc === 'Home or Draw') {
+            newOutcome.odds = liveOdds[0]?.odds || outcome.odds;
+          } else if (outcome.desc === 'Home or Away') {
+            newOutcome.odds = liveOdds[1]?.odds || outcome.odds;
+          } else if (outcome.desc === 'Draw or Away') {
+            newOutcome.odds = liveOdds[2]?.odds || outcome.odds;
+          }
+          return newOutcome;
+        });
+      }
+
+      // Handle Draw No Bet (ID: 11)
+      else if (market.id === '11' && liveMarketData[11]) {
+        const liveOdds = liveMarketData[11].outcomes;
+        updatedMarket.outcomes = market.outcomes.map((outcome) => {
+          const newOutcome = { ...outcome };
+          if (outcome.desc === 'Home') {
+            newOutcome.odds = liveOdds[0]?.odds || outcome.odds;
+          } else if (outcome.desc === 'Away') {
+            newOutcome.odds = liveOdds[1]?.odds || outcome.odds;
+          }
+          return newOutcome;
+        });
+      }
+
+      return updatedMarket;
+    });
+  };
+
   return (
     <div className='space-y-6'>
       {/* Match Score and Odds Section */}
@@ -883,7 +1010,10 @@ const PredictionTab = ({
         {/* Additional Markets Analysis */}
         <AdditionalMarketsComparison
           prematchMarkets={market?.enrichedData?.prematchMarketData}
-          liveMarkets={market?.markets}
+          liveMarkets={overrideOddsWithLiveData(
+            market?.markets,
+            market?.enrichedData?.odds
+          )}
         />
 
         {/* Score and Timeline Display */}

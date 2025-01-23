@@ -98,6 +98,7 @@ export const GET = async () => {
     return new NextResponse(JSON.stringify(data), {
       status: 200,
       headers: {
+        Referrer: 'sportybet.com',
         'Content-Type': 'application/json',
         'Cache-Control': 'private, no-cache, no-store, must-revalidate',
         Expires: '-1',
