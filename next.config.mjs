@@ -4,7 +4,7 @@ const nextConfig = {
     return [
       {
         source: '/livematchhub/:path*',
-        destination: 'http://localhost:5080/livematchhub/:path*',
+        destination: 'http://localhost:5113/livematchhub/:path*',
       },
     ];
   },

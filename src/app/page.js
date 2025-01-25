@@ -153,9 +153,9 @@ const HomeContent = () => {
 
   const {
     signalRData,
-    isSignalRConnected,
-    pauseUpdates: pauseUpdate,
-    resumeUpdates: resumeUpdate,
+    isConnected,
+    error: signalRError,
+    reconnect,
   } = useSignalRConnection();
 
   useEffect(() => {
